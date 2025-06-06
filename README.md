@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Photo App
 
 A Vue 3 + TypeScript application for managing and sharing photos with text.
@@ -100,3 +101,6 @@ The application is fully responsive with:
 ## Note
 
 This is a demo application with mock data and simulated backend functionality. In a production environment, you would need to implement proper backend services. 
+=======
+# Photo
+>>>>>>> 33e91be9e14ecf49c3538697f23e571f35bdf16e
