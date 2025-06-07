@@ -162,6 +162,35 @@ const validateEmail = () => {
   return true;
 };
 
+// 验证表单
+const validateForm = () => {
+  const isUsernameValid = validateUsername();
+  const isEmailValid = validateEmail();
+  const isPasswordValid = validatePassword();
+  const isConfirmPasswordValid = validateConfirmPassword();
+  const isTermsValid = validateTerms();
+  
+  return isUsernameValid && isEmailValid && isPasswordValid && isConfirmPasswordValid && isTermsValid;
+};
+
+// 密码强度检查
+const checkPasswordStrength = (pwd: string): {strength: 'weak' | 'medium' | 'strong', message: string} => {
+  const hasLowercase = /[a-z]/.test(pwd);
+  const hasUppercase = /[A-Z]/.test(pwd);
+  const hasNumber = /\d/.test(pwd);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+  
+  const count = [hasLowercase, hasUppercase, hasNumber, hasSpecial].filter(Boolean).length;
+  
+  if (count <= 1) {
+    return { strength: 'weak', message: '密码强度: 弱（建议包含大小写字母、数字和特殊字符）' };
+  } else if (count === 2 || count === 3) {
+    return { strength: 'medium', message: '密码强度: 中（可以添加更多类型字符提高安全性）' };
+  } else {
+    return { strength: 'strong', message: '密码强度: 强' };
+  }
+};
+
 // 验证密码
 const validatePassword = () => {
   if (!password.value) {
@@ -171,8 +200,16 @@ const validatePassword = () => {
     errors.password = '密码至少需要6个字符';
     return false;
   }
-  errors.password = '';
-  return true;
+  
+  // 显示密码强度
+  const { strength, message } = checkPasswordStrength(password.value);
+  if (strength === 'weak') {
+    errors.password = message;
+    return false;
+  } else {
+    errors.password = message;
+    return true;
+  }
 };
 
 // 验证确认密码
@@ -204,23 +241,36 @@ const handleRegister = async () => {
   error.value = '';
   
   // 验证表单
-  const isUsernameValid = validateUsername();
-  const isEmailValid = validateEmail();
-  const isPasswordValid = validatePassword();
-  const isConfirmPasswordValid = validateConfirmPassword();
-  const isTermsValid = validateTerms();
+  if (!validateForm()) {
+    return;
+  }
   
-  if (!isUsernameValid || !isEmailValid || !isPasswordValid || !isConfirmPasswordValid || !isTermsValid) {
+  // 验证是否同意条款
+  if (!agreeTerms.value) {
+    errors.agreeTerms = '您必须同意使用条款和隐私政策';
     return;
   }
   
   isLoading.value = true;
   
   try {
-    await authStore.register(username.value, email.value, password.value);
-    router.push('/');
-  } catch (err) {
-    error.value = '注册失败，该邮箱可能已被使用';
+    await authStore.register({
+      username: username.value, 
+      email: email.value, 
+      password: password.value,
+      confirmPassword: confirmPassword.value
+    });
+    
+    // 存储邮箱，方便后续登录
+    localStorage.setItem('rememberedEmail', email.value);
+    
+    router.push('/login?registered=true');
+  } catch (err: any) {
+    if (err.response && err.response.data && err.response.data.message) {
+      error.value = err.response.data.message;
+    } else {
+      error.value = '注册失败，该邮箱可能已被使用';
+    }
     console.error('注册错误:', err);
   } finally {
     isLoading.value = false;

@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../store/auth';
 
@@ -116,16 +116,20 @@ const validatePassword = () => {
   return true;
 };
 
+// 验证表单
+const validateForm = () => {
+  const isEmailValid = validateEmail();
+  const isPasswordValid = validatePassword();
+  return isEmailValid && isPasswordValid;
+};
+
 // 处理登录
 const handleLogin = async () => {
   // 重置错误信息
   error.value = '';
   
   // 验证表单
-  const isEmailValid = validateEmail();
-  const isPasswordValid = validatePassword();
-  
-  if (!isEmailValid || !isPasswordValid) {
+  if (!validateForm()) {
     return;
   }
   
@@ -134,13 +138,26 @@ const handleLogin = async () => {
   try {
     await authStore.login(email.value, password.value, rememberMe.value);
     router.push('/');
-  } catch (err) {
-    error.value = '登录失败，请检查您的邮箱和密码';
+  } catch (err: any) {
+    if (err.response && err.response.data && err.response.data.message) {
+      error.value = err.response.data.message;
+    } else {
+      error.value = '登录失败，请检查您的邮箱和密码';
+    }
     console.error('登录错误:', err);
   } finally {
     isLoading.value = false;
   }
 };
+
+// 自动填充存储的邮箱 (如果有)
+onMounted(() => {
+  const savedEmail = localStorage.getItem('rememberedEmail');
+  if (savedEmail) {
+    email.value = savedEmail;
+    rememberMe.value = true;
+  }
+});
 
 // 忘记密码功能
 const forgotPassword = () => {

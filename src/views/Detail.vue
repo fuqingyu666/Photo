@@ -131,6 +131,82 @@
         </div>
       </template>
     </div>
+    
+    <!-- Add this component for photo sharing -->
+    <div v-if="showShareDialog" class="share-dialog-overlay" @click.self="closeShareDialog">
+      <div class="share-dialog">
+        <div class="share-dialog-header">
+          <h3>分享照片</h3>
+          <button class="close-button" @click="closeShareDialog">×</button>
+        </div>
+        
+        <div class="share-dialog-content">
+          <div class="search-container">
+            <input 
+              type="text" 
+              v-model="searchQuery" 
+              placeholder="搜索用户名或邮箱..." 
+              @input="searchUsers"
+              class="search-input"
+            />
+            <div v-if="isSearching" class="search-loading">搜索中...</div>
+          </div>
+          
+          <div v-if="searchResults.length > 0" class="search-results">
+            <div 
+              v-for="user in searchResults" 
+              :key="user.id" 
+              class="user-item"
+              :class="{ 'shared': isSharedWithUser(user.id) }"
+              @click="toggleShareWithUser(user.id)"
+            >
+              <div class="user-avatar">
+                <img v-if="user.avatar" :src="user.avatar" :alt="user.username" />
+                <div v-else class="avatar-placeholder">{{ user.username.charAt(0).toUpperCase() }}</div>
+              </div>
+              <div class="user-info">
+                <div class="username">{{ user.username }}</div>
+                <div class="email">{{ user.email }}</div>
+              </div>
+              <div class="share-status">
+                <span v-if="isSharedWithUser(user.id)" class="shared-icon">✓</span>
+                <span v-else class="share-icon">+</span>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else-if="searchQuery && !isSearching" class="no-results">
+            没有找到匹配的用户
+          </div>
+          
+          <div class="shared-with-section">
+            <h4>已分享用户</h4>
+            <div v-if="sharedUsers.length > 0" class="shared-users-list">
+              <div v-for="user in sharedUsers" :key="user.id" class="user-item shared">
+                <div class="user-avatar">
+                  <img v-if="user.avatar" :src="user.avatar" :alt="user.username" />
+                  <div v-else class="avatar-placeholder">{{ user.username.charAt(0).toUpperCase() }}</div>
+                </div>
+                <div class="user-info">
+                  <div class="username">{{ user.username }}</div>
+                  <div class="email">{{ user.email }}</div>
+                </div>
+                <button class="remove-share-button" @click="unshareWithUser(user.id)">
+                  移除
+                </button>
+              </div>
+            </div>
+            <div v-else class="no-shared-users">
+              此照片尚未分享给任何用户
+            </div>
+          </div>
+        </div>
+        
+        <div class="share-dialog-footer">
+          <button class="cancel-button" @click="closeShareDialog">关闭</button>
+        </div>
+      </div>
+    </div>
   </app-layout>
 </template>
 
@@ -143,6 +219,7 @@ import AppLayout from '../components/AppLayout.vue'
 import { usePhotoStore, Photo, PhotoComment } from '../store/photo'
 import { useAuthStore } from '../store/auth'
 import { webSocketService, CommentEvent } from '../utils/websocket'
+import { searchUsers, getPhotoShares } from '../api/photo'
 
 const route = useRoute()
 const router = useRouter()
@@ -280,6 +357,97 @@ const formatDate = (date: Date): string => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// Photo sharing functionality
+const showShareDialog = ref(false)
+const searchQuery = ref('')
+const searchResults = ref<any[]>([])
+const sharedUsers = ref<any[]>([])
+const isSearching = ref(false)
+const shareError = ref('')
+
+// Open share dialog
+const openShareDialog = async () => {
+  showShareDialog.value = true
+  searchQuery.value = ''
+  searchResults.value = []
+  await loadSharedUsers()
+}
+
+// Close share dialog
+const closeShareDialog = () => {
+  showShareDialog.value = false
+}
+
+// Load users who have access to this photo
+const loadSharedUsers = async () => {
+  if (!photoStore.currentPhoto) return
+  
+  try {
+    sharedUsers.value = await getPhotoShares(photoStore.currentPhoto.id)
+  } catch (error) {
+    console.error('Error loading shared users:', error)
+  }
+}
+
+// Search users for sharing
+const searchUsers = async () => {
+  if (searchQuery.value.length < 2) {
+    searchResults.value = []
+    return
+  }
+  
+  isSearching.value = true
+  
+  try {
+    // Debounce search
+    await new Promise(resolve => setTimeout(resolve, 300))
+    searchResults.value = await searchUsers(searchQuery.value)
+  } catch (error) {
+    console.error('Error searching users:', error)
+  } finally {
+    isSearching.value = false
+  }
+}
+
+// Check if photo is shared with a user
+const isSharedWithUser = (userId: string): boolean => {
+  return sharedUsers.value.some(user => user.id === userId)
+}
+
+// Toggle share with user
+const toggleShareWithUser = async (userId: string) => {
+  if (!photoStore.currentPhoto) return
+  
+  try {
+    if (isSharedWithUser(userId)) {
+      await photoStore.unsharePhoto(photoStore.currentPhoto.id, userId)
+      sharedUsers.value = sharedUsers.value.filter(user => user.id !== userId)
+    } else {
+      await photoStore.sharePhoto(photoStore.currentPhoto.id, userId)
+      const user = searchResults.value.find(user => user.id === userId)
+      if (user && !sharedUsers.value.some(u => u.id === userId)) {
+        sharedUsers.value.push(user)
+      }
+    }
+  } catch (error) {
+    console.error('Error toggling share:', error)
+    shareError.value = '分享操作失败，请重试'
+  }
+}
+
+// Unshare with user
+const unshareWithUser = async (userId: string) => {
+  if (!photoStore.currentPhoto) return
+  
+  try {
+    await photoStore.unsharePhoto(photoStore.currentPhoto.id, userId)
+    sharedUsers.value = sharedUsers.value.filter(user => user.id !== userId)
+  } catch (error) {
+    console.error('Error unsharing photo:', error)
+    shareError.value = '取消分享失败，请重试'
+  }
 }
 </script>
 
@@ -557,6 +725,240 @@ const formatDate = (date: Date): string => {
     
     .comment-input-container {
       width: 100%;
+    }
+  }
+}
+
+// Add these styles for the share dialog
+.share-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.share-dialog {
+  background-color: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.share-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #ebeef5;
+  
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #303133;
+  }
+  
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #909399;
+    
+    &:hover {
+      color: #606266;
+    }
+  }
+}
+
+.share-dialog-content {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.search-container {
+  margin-bottom: 16px;
+  position: relative;
+  
+  .search-input {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    font-size: 14px;
+    
+    &:focus {
+      outline: none;
+      border-color: #409eff;
+    }
+  }
+  
+  .search-loading {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: #909399;
+  }
+}
+
+.search-results {
+  margin-bottom: 24px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.no-results {
+  text-align: center;
+  padding: 16px;
+  color: #909399;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.shared-with-section {
+  h4 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    color: #303133;
+  }
+}
+
+.shared-users-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.no-shared-users {
+  text-align: center;
+  padding: 16px;
+  color: #909399;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: #f5f7fa;
+  }
+  
+  &.shared {
+    background-color: #ecf5ff;
+    
+    &:hover {
+      background-color: #d9ecff;
+    }
+  }
+  
+  .user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 12px;
+    
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .avatar-placeholder {
+      width: 100%;
+      height: 100%;
+      background-color: #409eff;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+    }
+  }
+  
+  .user-info {
+    flex: 1;
+    
+    .username {
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .email {
+      font-size: 12px;
+      color: #909399;
+    }
+  }
+  
+  .share-status {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    .shared-icon {
+      color: #67c23a;
+      font-weight: bold;
+    }
+    
+    .share-icon {
+      color: #409eff;
+      font-weight: bold;
+    }
+  }
+  
+  .remove-share-button {
+    padding: 6px 12px;
+    background-color: #f56c6c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    
+    &:hover {
+      background-color: #e64242;
+    }
+  }
+}
+
+.share-dialog-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #ebeef5;
+  display: flex;
+  justify-content: flex-end;
+  
+  .cancel-button {
+    padding: 8px 20px;
+    background-color: #f0f2f5;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    
+    &:hover {
+      background-color: #e6e8eb;
     }
   }
 }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import * as authApi from '../api/auth'
 
 interface User {
     id: string
@@ -34,43 +35,43 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
-    // Mock login - in a real app, this would call an API
-    const login = async (loginData: LoginForm) => {
+    // Login - uses the real API
+    const login = async (email: string, password: string, rememberMe: boolean = false) => {
         loading.value = true
         error.value = ''
 
         try {
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 800))
-
-            // Mock successful login
-            const mockUser: User = {
-                id: '123',
-                username: loginData.username,
-                email: `${loginData.username}@example.com`,
-                avatar: 'https://randomuser.me/api/portraits/lego/1.jpg'
-            }
-
-            const mockToken = 'mock-jwt-token-' + Math.random().toString(36).substr(2, 9)
+            const response = await authApi.login({ email, password })
 
             // Save to store
-            user.value = mockUser
-            token.value = mockToken
+            user.value = response.user
+            token.value = response.token
 
             // Save to localStorage
-            localStorage.setItem('token', mockToken)
-            localStorage.setItem('user', JSON.stringify(mockUser))
+            localStorage.setItem('token', response.token)
+            localStorage.setItem('user', JSON.stringify(response.user))
+
+            // Save email if remember me is checked
+            if (rememberMe) {
+                localStorage.setItem('rememberedEmail', email);
+            } else {
+                localStorage.removeItem('rememberedEmail');
+            }
 
             return true
-        } catch (err) {
-            error.value = 'Login failed. Please check your credentials.'
+        } catch (err: any) {
+            if (err.response && err.response.data && err.response.data.error) {
+                error.value = err.response.data.error
+            } else {
+                error.value = '登录失败，请检查您的邮箱和密码'
+            }
             return false
         } finally {
             loading.value = false
         }
     }
 
-    // Mock register - in a real app, this would call an API
+    // Register - uses the real API
     const register = async (registerData: RegisterForm) => {
         loading.value = true
         error.value = ''
@@ -78,34 +79,28 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             // Validation
             if (registerData.password !== registerData.confirmPassword) {
-                error.value = 'Passwords do not match'
+                error.value = '两次输入的密码不匹配'
                 return false
             }
 
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1000))
-
-            // Mock successful registration
-            const mockUser: User = {
-                id: Date.now().toString(),
-                username: registerData.username,
-                email: registerData.email,
-                avatar: 'https://randomuser.me/api/portraits/lego/2.jpg'
-            }
-
-            const mockToken = 'mock-jwt-token-' + Math.random().toString(36).substr(2, 9)
+            const { confirmPassword, ...apiData } = registerData
+            const response = await authApi.register(apiData)
 
             // Save to store
-            user.value = mockUser
-            token.value = mockToken
+            user.value = response.user
+            token.value = response.token
 
             // Save to localStorage
-            localStorage.setItem('token', mockToken)
-            localStorage.setItem('user', JSON.stringify(mockUser))
+            localStorage.setItem('token', response.token)
+            localStorage.setItem('user', JSON.stringify(response.user))
 
             return true
-        } catch (err) {
-            error.value = 'Registration failed. Please try again.'
+        } catch (err: any) {
+            if (err.response && err.response.data && err.response.data.error) {
+                error.value = err.response.data.error
+            } else {
+                error.value = '注册失败，请稍后重试'
+            }
             return false
         } finally {
             loading.value = false

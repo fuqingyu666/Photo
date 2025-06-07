@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import * as photoApi from '../api/photo'
+import { Photo, PhotoCreate, PhotoUpdate } from '../api/photo'
 
 export interface PhotoComment {
     id: string
@@ -80,108 +82,244 @@ const generateMockPhotos = (): Photo[] => {
 
 // Photo Store
 export const usePhotoStore = defineStore('photo', () => {
+    // State
     const photos = ref<Photo[]>([])
-    const userPhotos = ref<Photo[]>([])
+    const sharedPhotos = ref<Photo[]>([])
     const currentPhoto = ref<Photo | null>(null)
-    const isLoading = ref(false)
+    const loading = ref(false)
     const error = ref('')
+    const pagination = ref({
+        page: 1,
+        limit: 20,
+        total: 0,
+        pages: 0
+    })
+    const sharedPagination = ref({
+        page: 1,
+        limit: 20,
+        total: 0,
+        pages: 0
+    })
 
-    // Initialize with mock data
-    const mockPhotos = generateMockPhotos()
-    photos.value = mockPhotos
+    // Getters
+    const hasMorePhotos = computed(() => {
+        return pagination.value.page < pagination.value.pages
+    })
 
-    // Set user's photos based on userId
-    const setUserPhotos = (userId: string) => {
-        userPhotos.value = photos.value.filter(photo => photo.userId === userId)
+    const hasMoreSharedPhotos = computed(() => {
+        return sharedPagination.value.page < sharedPagination.value.pages
+    })
+
+    // Actions
+    // Get user photos
+    const getUserPhotos = async (page: number = 1, limit: number = 20) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            const response = await photoApi.getUserPhotos(page, limit)
+
+            if (page === 1) {
+                photos.value = response.photos
+            } else {
+                photos.value = [...photos.value, ...response.photos]
+            }
+
+            pagination.value = response.pagination
+            return response.photos
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to get photos'
+            return []
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Get shared photos
+    const getSharedPhotos = async (page: number = 1, limit: number = 20) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            const response = await photoApi.getSharedPhotos(page, limit)
+
+            if (page === 1) {
+                sharedPhotos.value = response.photos
+            } else {
+                sharedPhotos.value = [...sharedPhotos.value, ...response.photos]
+            }
+
+            sharedPagination.value = response.pagination
+            return response.photos
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to get shared photos'
+            return []
+        } finally {
+            loading.value = false
+        }
     }
 
     // Get photo by ID
-    const getPhotoById = (id: string) => {
-        const photo = photos.value.find(p => p.id === id)
-        if (photo) {
-            currentPhoto.value = { ...photo }
+    const getPhotoById = async (id: string) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            const response = await photoApi.getPhotoById(id)
+            currentPhoto.value = response.photo
+            return response
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to get photo'
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Create photo
+    const createPhoto = async (data: PhotoCreate) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            const photo = await photoApi.createPhoto(data)
+            photos.value = [photo, ...photos.value]
             return photo
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to create photo'
+            return null
+        } finally {
+            loading.value = false
         }
+    }
+
+    // Update photo
+    const updatePhoto = async (id: string, data: PhotoUpdate) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            const updatedPhoto = await photoApi.updatePhoto(id, data)
+
+            // Update in photos array
+            const index = photos.value.findIndex(p => p.id === id)
+            if (index !== -1) {
+                photos.value[index] = updatedPhoto
+            }
+
+            // Update current photo if it's the same
+            if (currentPhoto.value && currentPhoto.value.id === id) {
+                currentPhoto.value = updatedPhoto
+            }
+
+            return updatedPhoto
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to update photo'
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Delete photo
+    const deletePhoto = async (id: string) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            await photoApi.deletePhoto(id)
+
+            // Remove from photos array
+            photos.value = photos.value.filter(p => p.id !== id)
+
+            // Clear current photo if it's the same
+            if (currentPhoto.value && currentPhoto.value.id === id) {
+                currentPhoto.value = null
+            }
+
+            return true
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to delete photo'
+            return false
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Share photo
+    const sharePhoto = async (id: string, userId: string) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            await photoApi.sharePhoto(id, { sharedWithUserId: userId })
+            return true
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to share photo'
+            return false
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Unshare photo
+    const unsharePhoto = async (id: string, userId: string) => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            await photoApi.unsharePhoto(id, { sharedWithUserId: userId })
+            return true
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to unshare photo'
+            return false
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Reset store
+    const reset = () => {
+        photos.value = []
+        sharedPhotos.value = []
         currentPhoto.value = null
-        return null
-    }
-
-    // Add a new photo
-    const addPhoto = (photo: Omit<Photo, 'id' | 'createdAt' | 'likes' | 'liked' | 'comments'>) => {
-        const newPhoto: Photo = {
-            ...photo,
-            id: `photo-${Date.now()}`,
-            createdAt: new Date(),
-            likes: 0,
-            liked: false,
-            comments: []
+        pagination.value = {
+            page: 1,
+            limit: 20,
+            total: 0,
+            pages: 0
         }
-
-        photos.value.unshift(newPhoto)
-        userPhotos.value.unshift(newPhoto)
-        return newPhoto
-    }
-
-    // Delete a photo
-    const deletePhoto = (id: string) => {
-        const index = photos.value.findIndex(p => p.id === id)
-        if (index !== -1) {
-            photos.value.splice(index, 1)
+        sharedPagination.value = {
+            page: 1,
+            limit: 20,
+            total: 0,
+            pages: 0
         }
-
-        const userIndex = userPhotos.value.findIndex(p => p.id === id)
-        if (userIndex !== -1) {
-            userPhotos.value.splice(userIndex, 1)
-        }
-    }
-
-    // Toggle like on a photo
-    const toggleLike = (id: string) => {
-        const photo = photos.value.find(p => p.id === id)
-        if (photo) {
-            photo.liked = !photo.liked
-            photo.likes += photo.liked ? 1 : -1
-        }
-
-        // Update current photo if it's the same
-        if (currentPhoto.value && currentPhoto.value.id === id) {
-            currentPhoto.value.liked = !currentPhoto.value.liked
-            currentPhoto.value.likes += currentPhoto.value.liked ? 1 : -1
-        }
-    }
-
-    // Add comment to a photo
-    const addComment = (photoId: string, comment: Omit<PhotoComment, 'id' | 'createdAt'>) => {
-        const photo = photos.value.find(p => p.id === photoId)
-        const newComment: PhotoComment = {
-            ...comment,
-            id: `comment-${Date.now()}`,
-            createdAt: new Date()
-        }
-
-        if (photo) {
-            photo.comments.push(newComment)
-        }
-
-        // Update current photo if it's the same
-        if (currentPhoto.value && currentPhoto.value.id === photoId) {
-            currentPhoto.value.comments.push(newComment)
-        }
-
-        return newComment
     }
 
     return {
+        // State
         photos,
-        userPhotos,
+        sharedPhotos,
         currentPhoto,
-        isLoading,
+        loading,
         error,
-        setUserPhotos,
+        pagination,
+        sharedPagination,
+
+        // Getters
+        hasMorePhotos,
+        hasMoreSharedPhotos,
+
+        // Actions
+        getUserPhotos,
+        getSharedPhotos,
         getPhotoById,
-        addPhoto,
+        createPhoto,
+        updatePhoto,
         deletePhoto,
-        toggleLike,
-        addComment
+        sharePhoto,
+        unsharePhoto,
+        reset
     }
 }) 
