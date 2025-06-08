@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { Server as SocketServer } from 'socket.io';
 import { UploadModel } from '../models/upload';
+import { PhotoModel } from '../models/photo';
 import env from '../config/env';
 
 // Configure multer for temporary storage
@@ -31,31 +32,72 @@ export const setSocketIO = (socketIO: SocketServer) => {
  */
 export const initUpload = async (req: Request, res: Response) => {
     try {
+        console.log("上传初始化请求收到");
+        console.log("用户:", req.user);
+        console.log("文件:", req.file);
+        console.log("请求体:", req.body);
+
         if (!req.user) {
-            return res.status(401).json({ error: 'Not authenticated' });
+            return res.status(401).json({ error: '未认证，请先登录' });
         }
 
-        const { original_filename, file_size, file_type, file_hash, chunks_total } = req.body;
-
-        // Validate required fields
-        if (!original_filename || !file_size || !file_type || !file_hash || !chunks_total) {
-            return res.status(400).json({ error: 'Missing required fields' });
+        if (!req.file) {
+            return res.status(400).json({ error: '没有提供文件' });
         }
 
-        // Initialize upload
+        // 使用文件信息初始化上传
         const upload = await UploadModel.initUpload({
             user_id: req.user.id,
-            original_filename,
-            file_size: parseInt(file_size),
-            file_type,
-            file_hash,
-            chunks_total: parseInt(chunks_total)
+            original_filename: req.file.originalname,
+            file_size: req.file.size,
+            file_type: req.file.mimetype,
+            file_hash: Date.now().toString(), // 简单时间戳，实际应该计算文件hash
+            chunks_total: 1 // 简化处理，只需要一个分块
         });
 
-        res.status(201).json({ upload });
-    } catch (error) {
-        console.error('Error initializing upload:', error);
-        res.status(500).json({ error: 'Failed to initialize upload' });
+        // 直接保存这个文件作为第一个分块
+        await UploadModel.uploadChunk(
+            upload.id,
+            0, // 第一个分块索引
+            upload.id.substring(0, 30) + '0', // 缩短的chunk_hash，确保不超过32个字符
+            req.file.buffer
+        );
+
+        // 更新上传状态为已完成
+        await UploadModel.updateStatus(upload.id, 'completed');
+
+        // 合并分块（虽然只有一个分块）
+        const filename = await UploadModel.mergeChunks(upload.id);
+
+        // 创建photo记录
+        const photo = await PhotoModel.create({
+            user_id: req.user.id,
+            title: req.file.originalname.split('.')[0] || '未命名照片',
+            description: '',
+            filename,
+            original_filename: req.file.originalname,
+            file_size: req.file.size,
+            file_type: req.file.mimetype,
+            file_hash: upload.file_hash,
+            width: 0,
+            height: 0,
+            is_private: false,
+            is_shared: true
+        });
+
+        // 返回成功结果
+        res.status(201).json({
+            upload,
+            photo,
+            url: `${req.protocol}://${req.get('host')}/uploads/${filename}`
+        });
+    } catch (error: any) {
+        console.error('初始化上传失败:', error);
+        res.status(500).json({
+            error: '初始化上传失败',
+            details: error.message,
+            stack: error.stack
+        });
     }
 };
 
@@ -72,7 +114,9 @@ export const uploadChunk = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No chunk file provided' });
         }
 
-        const { upload_id, chunk_index, chunk_hash } = req.body;
+        // 从URL参数或请求体获取upload_id
+        const upload_id = req.params.id || req.body.upload_id;
+        const { chunk_index, chunk_hash } = req.body;
 
         // Validate required fields
         if (!upload_id || chunk_index === undefined || !chunk_hash) {

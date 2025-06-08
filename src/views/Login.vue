@@ -4,7 +4,7 @@
       <div class="login-header">
         <img src="/favicon.svg" alt="Logo" class="login-logo" />
         <h1 class="login-title">登录</h1>
-        <p class="login-subtitle">照片管理应用</p>
+        <p class="login-subtitle">相册共享云平台</p>
       </div>
       
       <form @submit.prevent="handleLogin" class="login-form">
@@ -136,8 +136,12 @@ const handleLogin = async () => {
   isLoading.value = true;
   
   try {
-    await authStore.login(email.value, password.value, rememberMe.value);
-    router.push('/');
+    const result = await authStore.login(email.value, password.value, rememberMe.value);
+    if (result) {
+      router.push('/home');
+    } else {
+      error.value = authStore.error || '登录失败，请检查您的邮箱和密码';
+    }
   } catch (err: any) {
     if (err.response && err.response.data && err.response.data.message) {
       error.value = err.response.data.message;

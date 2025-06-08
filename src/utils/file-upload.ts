@@ -292,30 +292,37 @@ export const startUpload = async (
     try {
         // If we don't have an uploadId yet, initialize the upload on the server
         if (!task.uploadId) {
-            const response = await axios.post('/api/upload/init', {
-                original_filename: task.fileName,
-                file_size: task.fileSize,
-                file_type: task.fileType,
-                file_hash: task.fileHash,
-                chunks_total: task.chunks.length
-            })
+            try {
+                const response = await axios.post('/api/upload/init', {
+                    original_filename: task.fileName,
+                    file_size: task.fileSize,
+                    file_type: task.fileType,
+                    file_hash: task.fileHash,
+                    chunks_total: task.chunks.length
+                })
 
-            if (response.data && response.data.upload) {
-                task.uploadId = response.data.upload.id
-                task.uploadedChunks = response.data.upload.chunks_uploaded
+                if (response.data && response.data.upload) {
+                    task.uploadId = response.data.upload.id
+                    task.uploadedChunks = response.data.upload.chunks_uploaded
 
-                // Update chunk status for already uploaded chunks
-                for (let i = 0; i < task.uploadedChunks; i++) {
-                    if (task.chunks[i]) {
-                        task.chunks[i].status = 'complete'
-                        task.chunks[i].progress = 100
+                    // Update chunk status for already uploaded chunks
+                    for (let i = 0; i < task.uploadedChunks; i++) {
+                        if (task.chunks[i]) {
+                            task.chunks[i].status = 'complete'
+                            task.chunks[i].progress = 100
+                        }
                     }
-                }
 
-                // Calculate overall progress
-                task.progress = (task.uploadedChunks / task.chunks.length) * 100
-            } else {
-                throw new Error('Failed to initialize upload on server')
+                    // Calculate overall progress
+                    task.progress = (task.uploadedChunks / task.chunks.length) * 100
+                } else {
+                    throw new Error('Failed to initialize upload on server')
+                }
+            } catch (error) {
+                console.error('Error initializing upload on server:', error)
+                task.status = 'error'
+                task.error = 'Failed to initialize upload'
+                return false
             }
         }
 
@@ -333,21 +340,44 @@ export const startUpload = async (
                 await Promise.all(
                     chunksToUpload.map(async (chunk) => {
                         try {
-                            const result = await uploadChunk(chunk, task)
+                            // Retry logic for chunk upload
+                            let retryCount = 0;
+                            let success = false;
+
+                            while (!success && retryCount < MAX_RETRY_ATTEMPTS && task.status === 'uploading') {
+                                try {
+                                    await uploadChunk(chunk, task)
+                                    success = true;
+                                } catch (error) {
+                                    retryCount++;
+                                    console.warn(`Chunk ${chunk.index} upload failed, retrying (${retryCount}/${MAX_RETRY_ATTEMPTS})`, error);
+
+                                    if (retryCount >= MAX_RETRY_ATTEMPTS) {
+                                        throw error;
+                                    }
+
+                                    // Wait before retrying
+                                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                                }
+                            }
 
                             if (onProgress) {
                                 onProgress(task.progress, task)
                             }
 
-                            return result
+                            return success;
                         } catch (error) {
                             console.error(`Error uploading chunk ${chunk.index}:`, error)
-                            task.status = 'error'
-                            task.error = `Failed to upload chunk ${chunk.index}`
-                            throw error
+                            chunk.status = 'error'
+
+                            // Don't fail the entire upload immediately, let other chunks complete
+                            return false
                         }
                     })
                 )
+
+                // Save progress periodically
+                saveUploadProgress(task)
 
                 // Check if user paused the upload
                 if (task.status !== 'uploading') {
@@ -355,37 +385,38 @@ export const startUpload = async (
                 }
             }
 
+            // Check if all chunks completed successfully
+            const failedChunks = task.chunks.filter(chunk => chunk.status === 'error')
+            if (failedChunks.length > 0) {
+                task.status = 'error'
+                task.error = `Failed to upload ${failedChunks.length} chunks`
+                return false
+            }
+
+            // All chunks uploaded successfully
+            task.status = 'completed'
+            task.progress = 100
+            task.uploadedChunks = task.chunks.length
+
+            // Notify server that upload is complete
+            try {
+                await axios.put(`/api/upload/${task.uploadId}/status`, {
+                    status: 'completed'
+                })
+            } catch (error) {
+                console.error('Error updating upload status on server:', error)
+                // Continue anyway, the chunks are uploaded
+            }
+
             return true
         }
 
         // Start uploading chunks
-        await uploadChunksInBatches()
-
-        // If all chunks are uploaded, complete the upload
-        if (task.uploadedChunks === task.chunks.length && task.status === 'uploading') {
-            const completeResponse = await axios.post('/api/upload/complete', {
-                upload_id: task.uploadId
-            })
-
-            task.status = 'completed'
-            task.progress = 100
-
-            if (completeResponse.data && completeResponse.data.url) {
-                task.url = completeResponse.data.url
-            }
-
-            if (onProgress) {
-                onProgress(100, task)
-            }
-
-            return true
-        }
-
-        return task.status === 'completed'
+        return await uploadChunksInBatches()
     } catch (error) {
-        console.error('Error uploading file:', error)
+        console.error('Error in upload task:', error)
         task.status = 'error'
-        task.error = error instanceof Error ? error.message : 'Unknown error'
+        task.error = error instanceof Error ? error.message : 'Unknown upload error'
         return false
     }
 }

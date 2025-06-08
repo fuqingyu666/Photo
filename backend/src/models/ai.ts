@@ -438,8 +438,8 @@ export class AIModel {
      */
     static async getChatHistory(userId: string, limit: number = 50): Promise<ChatMessage[]> {
         const [rows] = await pool.execute(
-            'SELECT * FROM ai_chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-            [userId, limit]
+            `SELECT * FROM ai_chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ${parseInt(String(limit))}`,
+            [userId]
         );
 
         return rows as ChatMessage[];

@@ -47,57 +47,81 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                     content: msg.content
                 }));
 
-            // 调用后端API
-            const response = await axios.post('/api/ai/chat',
-                {
-                    message: content,
-                    context: contextMessages
-                },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${authStore.token}`
-                    }
-                });
+            // 直接调用SiliconFlow API
+            const apiKey = 'sk-yxxplzgtjouqhvdtikrmmrzepaigzarzfjrtrmolbxbamjyj'; // SiliconFlow API 密钥
 
-            if (response.data && response.data.response) {
-                return response.data.response;
+            const requestBody = {
+                model: "Qwen/QwQ-32B",
+                messages: [
+                    ...contextMessages,
+                    { role: 'user', content: content }
+                ],
+                stream: false,
+                max_tokens: 512,
+                temperature: 0.7,
+                top_p: 0.7
+            };
+
+            console.log('发送请求:', JSON.stringify(requestBody, null, 2));
+
+            const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`API返回错误: ${response.status} ${response.statusText}`, errorText);
+                throw new Error(`API返回错误: ${response.status} ${response.statusText}`);
+            }
+
+            const responseData = await response.json();
+            console.log('API响应:', responseData);
+
+            if (responseData && responseData.choices && responseData.choices[0] && responseData.choices[0].message) {
+                return responseData.choices[0].message.content;
             } else {
-                throw new Error('Invalid AI response');
+                console.error('无效的DeepSeek API响应结构:', responseData);
+                throw new Error('无效的API响应结构');
             }
         } catch (error) {
-            console.error('Failed to call DeepSeek API:', error);
+            console.error('调用DeepSeek API失败:', error);
             // 如果API调用失败，回退到模拟响应
             return mockAiResponse(content);
         }
     };
 
-    // Mock AI response function (用于API未配置或调用失败时)
+    // 模拟AI响应函数 (用于API未配置或调用失败时)
     const mockAiResponse = async (content: string): Promise<string> => {
-        // Simulate API delay
+        // 模拟API延迟
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000))
 
         const responses = [
-            "I'm a DeepSeek AI simulation. In a real application, this would call the DeepSeek API.",
-            "That's an interesting question! This is a simulated response from DeepSeek.",
-            "Thanks for sharing! I'm currently just a mock implementation, but in production I would connect to the DeepSeek AI API.",
-            "I'd be happy to help with that. In a real implementation, the powerful DeepSeek AI would analyze your request.",
-            "Good question! In a full implementation, DeepSeek AI would provide detailed answers based on its extensive knowledge."
+            "我是DeepSeek AI模拟。在实际应用中，这里会调用DeepSeek API。",
+            "这是个有趣的问题！这是来自DeepSeek的模拟响应。",
+            "感谢您的分享！我目前只是一个模拟实现，但在生产环境中我会连接到DeepSeek AI API。",
+            "我很乐意帮助您。在实际实现中，强大的DeepSeek AI会分析您的请求。",
+            "好问题！在完整实现中，DeepSeek AI会基于其广泛的知识提供详细答案。"
         ]
 
-        // If the message contains a greeting, respond with a greeting
-        if (content.toLowerCase().includes('hello') ||
-            content.toLowerCase().includes('hi') ||
-            content.toLowerCase().includes('hey')) {
-            return "Hello! I'm your DeepSeek AI assistant. How can I help you today?";
+        // 如果消息包含问候，回复问候
+        if (content.toLowerCase().includes('你好') ||
+            content.toLowerCase().includes('hello') ||
+            content.toLowerCase().includes('hi')) {
+            return "你好！我是您的DeepSeek AI助手。今天我能为您做什么？";
         }
 
-        // If the message asks for the assistant's identity
-        if (content.toLowerCase().includes('who are you') ||
-            content.toLowerCase().includes('what are you')) {
-            return "I'm a DeepSeek AI assistant (simulated in this demo). I'm designed to have conversations and provide useful information.";
+        // 如果消息询问助手的身份
+        if (content.toLowerCase().includes('你是谁') ||
+            content.toLowerCase().includes('你是什么')) {
+            return "我是DeepSeek AI助手（在此演示中模拟）。我被设计用来进行对话并提供有用的信息。";
         }
 
-        // Otherwise return a random response
+        // 否则返回随机响应
         return responses[Math.floor(Math.random() * responses.length)]
     }
 
@@ -213,59 +237,88 @@ export const useAiChatStore = defineStore('ai-chat', () => {
 
                 // Create and process stream
                 try {
-                    // Request the stream from the server
-                    const response = await fetch('/api/ai/chat', {
+                    // 使用SiliconFlow API的流式接口
+                    const apiKey = 'sk-yxxplzgtjouqhvdtikrmmrzepaigzarzfjrtrmolbxbamjyj';
+
+                    const requestBody = {
+                        model: "Qwen/QwQ-32B",
+                        messages: [
+                            ...context,
+                            { role: 'user', content }
+                        ],
+                        stream: true,
+                        max_tokens: 512,
+                        temperature: 0.7,
+                        top_p: 0.7
+                    };
+
+                    console.log('发送流式请求:', JSON.stringify(requestBody, null, 2));
+
+                    const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
                         method: 'POST',
                         headers: {
+                            'Authorization': `Bearer ${apiKey}`,
                             'Content-Type': 'application/json',
-                            'Accept': 'text/event-stream',
-                            'Authorization': `Bearer ${authStore.token}`
+                            'Accept': 'text/event-stream'
                         },
-                        body: JSON.stringify({ message: content, context }),
+                        body: JSON.stringify(requestBody),
                         signal: options.signal
-                    })
+                    });
 
                     if (!response.ok) {
-                        throw new Error(`Server returned ${response.status}`)
+                        const errorText = await response.text();
+                        console.error(`API返回错误: ${response.status} ${response.statusText}`, errorText);
+                        throw new Error(`API返回错误: ${response.status} ${response.statusText}`);
                     }
 
-                    const reader = response.body?.getReader()
-                    if (!reader) throw new Error('Response body stream not available')
+                    const reader = response.body?.getReader();
+                    if (!reader) throw new Error('响应流不可用');
 
-                    // Read stream data
-                    const decoder = new TextDecoder()
-                    let buffer = ''
+                    // 读取流数据
+                    const decoder = new TextDecoder();
+                    let buffer = '';
 
                     while (true) {
-                        const { done, value } = await reader.read()
-                        if (done) break
+                        const { done, value } = await reader.read();
+                        if (done) break;
 
-                        buffer += decoder.decode(value, { stream: true })
-                        const lines = buffer.split('\n\n')
-                        buffer = lines.pop() || ''
+                        // 解码当前块
+                        buffer += decoder.decode(value, { stream: true });
+
+                        // 按行分割，处理每个事件
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
 
                         for (const line of lines) {
-                            if (!line.startsWith('data:')) continue
+                            if (line.trim() === '' || !line.startsWith('data:')) continue;
 
                             try {
-                                const json = JSON.parse(line.slice(5))
-                                if (json.content === '[START]') {
-                                    // Stream start, no action needed
-                                } else if (json.content === '[DONE]') {
-                                    // Stream completed
-                                    isLoading.value = false
-                                } else if (json.content && json.content.startsWith('[ERROR]')) {
-                                    // Handle error
-                                    throw new Error(json.content.substring(8))
-                                } else if (json.content) {
-                                    // Receive content
-                                    updateStreamingMessage(json.content)
-                                    if (options.onStream) {
-                                        options.onStream(json.content)
+                                // 解析事件数据
+                                const eventData = line.slice(5).trim();
+                                if (eventData === '[DONE]') {
+                                    // 流完成
+                                    isLoading.value = false;
+                                    continue;
+                                }
+
+                                const json = JSON.parse(eventData);
+                                console.log('流式响应块:', json);
+
+                                if (json.choices && json.choices[0]) {
+                                    if (json.choices[0].delta && json.choices[0].delta.content) {
+                                        // 获取增量内容
+                                        const delta = json.choices[0].delta.content;
+                                        // 更新消息
+                                        updateStreamingMessage(delta);
+                                        if (options.onStream) {
+                                            options.onStream(delta);
+                                        }
+                                    } else if (json.choices[0].finish_reason) {
+                                        console.log('流式响应完成:', json.choices[0].finish_reason);
                                     }
                                 }
                             } catch (e) {
-                                console.error('Error parsing SSE:', e, line)
+                                console.error('解析SSE错误:', e, line);
                             }
                         }
                     }
@@ -279,18 +332,18 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                 } catch (err) {
                     // Handle stream errors
                     if (err instanceof DOMException && err.name === 'AbortError') {
-                        console.log('Stream cancelled by user')
+                        console.log('用户取消了流式响应')
                         // Don't set an error when intentionally cancelled
                     } else {
-                        console.error('Stream error:', err)
-                        error.value = err instanceof Error ? err.message : 'Error streaming response'
+                        console.error('流式响应错误:', err)
+                        error.value = err instanceof Error ? err.message : '获取AI响应时出错'
 
                         // Add error message to chat if streaming failed
                         if (currentStreamingMessage.value) {
                             // If we have some content already, keep it
                             if (currentStreamingMessage.value.content.length === 0) {
                                 currentStreamingMessage.value.content =
-                                    "Sorry, there was an error processing your request. Please try again.";
+                                    "抱歉，处理您的请求时出现错误。请重试。";
                                 saveMessagesToStorage();
                             }
                         }
@@ -307,16 +360,16 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                     const aiMessage = await addAIMessage(aiResponse)
                     return aiMessage
                 } catch (err) {
-                    console.error('Error calling API:', err)
-                    error.value = err instanceof Error ? err.message : 'Failed to get AI response'
+                    console.error('调用API错误:', err)
+                    error.value = err instanceof Error ? err.message : '获取AI响应失败'
                     return null
                 } finally {
                     isLoading.value = false
                 }
             }
         } catch (err) {
-            console.error('Error sending message:', err)
-            error.value = err instanceof Error ? err.message : 'Failed to send message'
+            console.error('发送消息错误:', err)
+            error.value = err instanceof Error ? err.message : '发送消息失败'
             isLoading.value = false
             return null
         }

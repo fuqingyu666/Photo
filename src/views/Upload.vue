@@ -2,134 +2,114 @@
   <app-layout>
     <div class="upload-page">
       <div class="page-header">
-        <h1>Upload Photo</h1>
+        <h1>上传照片</h1>
       </div>
       
       <div class="upload-container">
         <el-card class="upload-card">
-          <div class="upload-area" @click="triggerFileInput" @dragover.prevent @drop.prevent="handleFileDrop">
-            <input 
-              type="file" 
-              ref="fileInputRef" 
-              accept="image/*" 
-              style="display: none" 
-              @change="handleFileSelect"
-            >
-            
+          <div
+            class="upload-area"
+            :class="{ 'is-dragging': isDragging }"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleFileDrop"
+          >
             <template v-if="!selectedFile">
-              <el-icon class="upload-icon"><upload-filled /></el-icon>
-              <p class="upload-text">Click or drag image to this area to upload</p>
-              <p class="upload-hint">Support for a single image upload. Max size: 50MB</p>
+              <el-icon :size="64" class="upload-icon"><UploadFilled /></el-icon>
+              <h3>拖放图片到此处或</h3>
+              <el-button type="primary" @click="triggerFileInput">选择图片</el-button>
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept="image/*"
+                class="file-input"
+                @change="handleFileSelect"
+              />
+              <p class="upload-hint">支持JPG、PNG、GIF格式，最大50MB</p>
             </template>
             
             <template v-else>
               <div class="selected-file">
-                <div class="preview-image">
-                  <img :src="previewUrl" alt="Preview">
-                </div>
-                <div class="file-info">
-                  <h3>{{ selectedFile.name }}</h3>
-                  <p>{{ formatFileSize(selectedFile.size) }}</p>
-                </div>
-                <el-button type="danger" circle @click.stop="removeFile">
-                  <el-icon><close /></el-icon>
-                </el-button>
-              </div>
-            </template>
-          </div>
-          
-          <div v-if="uploadTask" class="upload-progress">
-            <div class="progress-header">
-              <span>Upload Progress</span>
-              <span>{{ Math.round(uploadTask.progress) }}%</span>
-            </div>
-            <el-progress :percentage="uploadTask.progress" :status="uploadStatus" />
-            
-            <div class="upload-stats">
-              <p>Chunks: {{ uploadTask.uploadedChunks }}/{{ uploadTask.chunks.length }}</p>
-              <p>Status: {{ uploadTask.status }}</p>
-            </div>
-            
-            <div class="upload-actions">
-              <el-button 
-                v-if="uploadTask.status === 'pending' || uploadTask.status === 'paused'" 
-                type="primary" 
-                @click="startUpload"
-                :loading="uploadTask.status === 'uploading'"
-              >
-                {{ uploadTask.status === 'paused' ? 'Resume' : 'Start Upload' }}
-              </el-button>
-              
-              <el-button 
-                v-if="uploadTask.status === 'uploading'" 
-                type="warning" 
-                @click="pauseUpload"
-              >
-                Pause
-              </el-button>
-              
-              <el-button 
-                v-if="uploadTask.status === 'completed'" 
-                type="success" 
-                @click="finishUpload"
-              >
-                Finish
-              </el-button>
-            </div>
-          </div>
-          
-          <el-divider v-if="selectedFile && !uploadTask" />
-          
-          <div v-if="selectedFile && !uploadTask" class="photo-form">
-            <el-form :model="photoForm" label-position="top">
-              <el-form-item label="Title" required>
-                <el-input v-model="photoForm.title" placeholder="Enter a title for your photo" />
-              </el-form-item>
-              
-              <el-form-item label="Description" required>
-                <el-input 
-                  v-model="photoForm.description" 
-                  type="textarea" 
-                  :rows="4" 
-                  placeholder="Describe your photo"
-                />
-              </el-form-item>
-              
-              <el-form-item>
-                <el-button type="primary" @click="prepareUpload" :disabled="!canUpload">
-                  Upload Photo
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </div>
-          
-          <div v-if="savedTasks.length > 0" class="saved-uploads">
-            <h3>Saved Uploads</h3>
-            <p>You have previously paused uploads. Would you like to resume?</p>
-            
-            <div class="saved-tasks-list">
-              <el-card 
-                v-for="task in savedTasks" 
-                :key="task.fileId" 
-                class="saved-task-item"
-                shadow="hover"
-              >
-                <div class="saved-task-info">
-                  <h4>{{ task.fileName }}</h4>
-                  <p>{{ formatFileSize(task.fileSize) }} | {{ formatDate(task.createTime) }}</p>
-                  <p>Progress: {{ Math.round(task.progress) }}%</p>
+                <div class="preview-container">
+                  <img :src="previewUrl" class="preview-image" alt="Preview" />
                 </div>
                 
-                <div class="saved-task-actions">
-                  <el-button type="primary" size="small" @click="resumeSavedTask(task.fileId)">
-                    Resume
-                  </el-button>
-                  <el-button type="danger" size="small" @click="deleteSavedTask(task.fileId)">
-                    Delete
-                  </el-button>
+                <div class="file-info">
+                  <div class="file-header">
+                    <h3>{{ selectedFile.name }}</h3>
+                    <el-button
+                      type="danger"
+                      size="small"
+                      circle
+                      @click="removeFile"
+                      :disabled="isUploading"
+                    >
+                      <el-icon><Close /></el-icon>
+                    </el-button>
+                  </div>
+                  
+                  <p>{{ formatFileSize(selectedFile.size) }}</p>
+                  
+                  <el-form class="photo-form">
+                    <el-form-item label="标题">
+                      <el-input v-model="photoForm.title" :disabled="isUploading" />
+                    </el-form-item>
+                    
+                    <el-form-item label="描述">
+                      <el-input
+                        v-model="photoForm.description"
+                        type="textarea"
+                        rows="3"
+                        :disabled="isUploading"
+                      />
+                    </el-form-item>
+                    
+                    <el-form-item label="隐私设置">
+                      <el-switch
+                        v-model="photoForm.isPrivate"
+                        :disabled="isUploading"
+                        active-text="私密"
+                        inactive-text="公开"
+                      />
+                      <div class="setting-hint">私密照片仅自己可见，不会显示在共享页面</div>
+                    </el-form-item>
+                    
+                    <el-form-item label="共享设置">
+                      <el-switch
+                        v-model="photoForm.isShared"
+                        :disabled="isUploading || photoForm.isPrivate"
+                        active-text="共享"
+                        inactive-text="不共享"
+                      />
+                      <div class="setting-hint">共享照片将显示在共享页面供其他用户查看</div>
+                    </el-form-item>
+                  </el-form>
+                  
+                  <div v-if="isUploading" class="upload-progress">
+                    <el-progress
+                      :percentage="uploadProgress"
+                      :status="uploadStatus === 'error' ? 'exception' : undefined"
+                    />
+                    <p>{{ uploadStatus === 'complete' ? '上传完成' : '上传中...' }}</p>
+                  </div>
+                  
+                  <div class="upload-actions">
+                    <el-button
+                      type="primary"
+                      @click="startUpload"
+                      :disabled="!canUpload || isUploading"
+                      :loading="isUploading"
+                    >
+                      开始上传
+                    </el-button>
+                    
+                    <el-button @click="removeFile" :disabled="isUploading">
+                      取消
+                    </el-button>
+                  </div>
                 </div>
-              </el-card>
-            </div>
+              </div>
+            </template>
           </div>
         </el-card>
       </div>
@@ -145,15 +125,7 @@ import { UploadFilled, Close } from '@element-plus/icons-vue'
 import AppLayout from '../components/AppLayout.vue'
 import { useAuthStore } from '../store/auth'
 import { usePhotoStore } from '../store/photo'
-import { 
-  createUploadTask, 
-  startUpload, 
-  pauseUpload as pauseUploadTask,
-  saveUploadProgress,
-  getSavedUploadTasks,
-  clearSavedUploadTask,
-  UploadTask
-} from '../utils/file-upload'
+import { initUpload, uploadChunk, completeUpload } from '../api/upload'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -162,66 +134,54 @@ const photoStore = usePhotoStore()
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
-const uploadTask = ref<UploadTask | null>(null)
-const savedTasks = ref<Partial<UploadTask>[]>([])
-
-// Photo form data
 const photoForm = ref({
   title: '',
-  description: ''
+  description: '',
+  isPrivate: false,
+  isShared: true
 })
+const chunks = ref<Blob[]>([])
+const totalChunks = ref(0)
+const currentChunk = ref(0)
+const fileId = ref('')
+const uploadStatus = ref('pending')
+const isDragging = ref(false)
+const isUploading = ref(false)
+const uploadProgress = ref(0)
 
-// Check if can upload
 const canUpload = computed(() => {
-  return selectedFile.value && photoForm.value.title && photoForm.value.description
+  return selectedFile.value && photoForm.value.title.trim() !== ''
 })
 
-// Get upload status
-const uploadStatus = computed(() => {
-  if (!uploadTask.value) return ''
-  
-  switch (uploadTask.value.status) {
-    case 'completed':
-      return 'success'
-    case 'error':
-      return 'exception'
-    case 'paused':
-      return 'warning'
-    default:
-      return ''
-  }
-})
-
-// Load saved upload tasks
-onMounted(() => {
-  loadSavedTasks()
-})
-
-// Load saved tasks from localStorage
-const loadSavedTasks = () => {
-  savedTasks.value = getSavedUploadTasks()
-}
-
-// Trigger file input click
 const triggerFileInput = () => {
   if (fileInputRef.value) {
     fileInputRef.value.click()
   }
 }
 
-// Handle file drop
 const handleFileDrop = (event: DragEvent) => {
+  event.preventDefault()
+  isDragging.value = false
+
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
     const file = event.dataTransfer.files[0]
     if (file.type.startsWith('image/')) {
       selectFile(file)
     } else {
-      ElMessage.error('Please select an image file')
+      ElMessage.error('请选择图片文件')
     }
   }
 }
 
-// Handle file select from input
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+  isDragging.value = true
+}
+
+const handleDragLeave = () => {
+  isDragging.value = false
+}
+
 const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement
   if (input.files && input.files.length > 0) {
@@ -229,126 +189,104 @@ const handleFileSelect = (event: Event) => {
   }
 }
 
-// Select file and create preview
 const selectFile = (file: File) => {
-  // Check file size (max 50MB)
   if (file.size > 50 * 1024 * 1024) {
-    ElMessage.error('File size exceeds the 50MB limit')
+    ElMessage.error('文件大小超过50MB限制')
     return
   }
   
   selectedFile.value = file
   
-  // Create preview URL
+  // 创建本地文件预览URL
   const reader = new FileReader()
   reader.onload = (e) => {
-    previewUrl.value = e.target?.result as string
+    if (e.target?.result) {
+      previewUrl.value = e.target.result as string
+    }
   }
   reader.readAsDataURL(file)
   
-  // Reset form and task
-  photoForm.value.title = file.name.split('.')[0] || 'Untitled'
+  photoForm.value.title = file.name.split('.')[0] || '未命名'
   photoForm.value.description = ''
-  uploadTask.value = null
+  
+  prepareChunks(file)
 }
 
-// Remove selected file
+const prepareChunks = (file: File) => {
+  const chunkSize = 1024 * 1024
+  totalChunks.value = Math.ceil(file.size / chunkSize)
+  chunks.value = []
+  
+  for (let i = 0; i < totalChunks.value; i++) {
+    const start = i * chunkSize
+    const end = Math.min(file.size, start + chunkSize)
+    chunks.value.push(file.slice(start, end))
+  }
+  
+  currentChunk.value = 0
+}
+
 const removeFile = () => {
   selectedFile.value = null
   previewUrl.value = ''
-  uploadTask.value = null
+  chunks.value = []
+  totalChunks.value = 0
+  currentChunk.value = 0
+  uploadProgress.value = 0
+  fileId.value = ''
+  uploadStatus.value = 'pending'
 }
 
-// Prepare upload task
-const prepareUpload = async () => {
+const startUpload = async () => {
   if (!selectedFile.value || !canUpload.value) return
   
   try {
-    ElMessage.info('Preparing file for upload, please wait...')
-    uploadTask.value = await createUploadTask(selectedFile.value)
-    ElMessage.success('File prepared for upload')
-  } catch (error) {
-    ElMessage.error('Failed to prepare file for upload')
-    console.error(error)
-  }
-}
-
-// Start upload
-const startUpload = async () => {
-  if (!uploadTask.value) return
-  
-  try {
-    await startUpload(uploadTask.value, (progress) => {
-      // Progress callback
-      if (uploadTask.value && uploadTask.value.status === 'paused') {
-        saveUploadProgress(uploadTask.value)
-      }
-    })
+    isUploading.value = true
+    uploadStatus.value = 'uploading'
+    uploadProgress.value = 0
     
-    if (uploadTask.value.status === 'completed') {
-      ElMessage.success('Upload completed successfully')
+    console.log('开始上传文件:', selectedFile.value.name)
+    
+    // 创建表单并直接添加文件
+    const formData = new FormData()
+    formData.append('chunk', selectedFile.value) // 作为chunk字段上传
+    
+    // 发送上传请求
+    const response = await initUpload(formData)
+    console.log('上传成功:', response)
+    
+    // 文件已经上传完成，直接使用返回的信息
+    uploadProgress.value = 100
+    uploadStatus.value = 'complete'
+    
+    // 上传完成，添加到照片库
+    if (authStore.user && response.photo) {
+      const newPhoto = photoStore.addPhoto({
+        userId: authStore.user.id,
+        username: authStore.user.username,
+        userAvatar: authStore.user.avatar || '',
+        title: photoForm.value.title || response.photo.title,
+        description: photoForm.value.description || '',
+        imageUrl: response.url,
+        isPrivate: photoForm.value.isPrivate,
+        isShared: photoForm.value.isShared
+      })
+      
+      ElMessage.success('照片上传成功')
+      router.push('/home')
     }
   } catch (error) {
-    ElMessage.error('Upload failed')
-    console.error(error)
+    console.error('上传失败:', error)
+    if (error.response) {
+      console.error('错误详情:', error.response.data)
+    }
+    ElMessage.error('上传失败，请重试')
+    uploadStatus.value = 'error'
+  } finally {
+    isUploading.value = false
   }
 }
 
-// Pause upload
-const pauseUpload = () => {
-  if (!uploadTask.value) return
-  
-  pauseUploadTask(uploadTask.value)
-  saveUploadProgress(uploadTask.value)
-  ElMessage.warning('Upload paused. You can resume later.')
-  loadSavedTasks()
-}
-
-// Finish upload and save photo
-const finishUpload = () => {
-  if (!uploadTask.value || !authStore.user) return
-  
-  // In a real app, we would send the chunks to the server and get back the URL
-  // For this demo, we'll use the preview URL
-  const newPhoto = photoStore.addPhoto({
-    userId: authStore.user.id,
-    username: authStore.user.username,
-    userAvatar: authStore.user.avatar || '',
-    title: photoForm.value.title,
-    description: photoForm.value.description,
-    imageUrl: previewUrl.value
-  })
-  
-  // Clear the upload task
-  if (uploadTask.value) {
-    clearSavedUploadTask(uploadTask.value.fileId)
-  }
-  
-  ElMessage.success('Photo added successfully')
-  router.push(`/detail/${newPhoto.id}`)
-}
-
-// Resume a saved task
-const resumeSavedTask = (fileId: string) => {
-  const task = savedTasks.value.find(task => task.fileId === fileId)
-  if (!task) return
-  
-  ElMessage.info('This is a mock implementation. In a real app, we would resume the upload.')
-  
-  // In a real app, we would recreate the upload task and resume it
-  // For this demo, we'll just remove it from saved tasks
-  clearSavedUploadTask(fileId)
-  loadSavedTasks()
-}
-
-// Delete a saved task
-const deleteSavedTask = (fileId: string) => {
-  clearSavedUploadTask(fileId)
-  loadSavedTasks()
-  ElMessage.success('Saved upload deleted')
-}
-
-// Format file size
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes'
   
@@ -357,15 +295,6 @@ const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// Format date
-const formatDate = (date: Date | string): string => {
-  return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
 }
 </script>
 
@@ -398,43 +327,47 @@ const formatDate = (date: Date | string): string => {
   border-radius: 6px;
   padding: 40px;
   text-align: center;
-  cursor: pointer;
-  transition: border-color 0.3s;
+  transition: all 0.3s;
   
-  &:hover {
-    border-color: #409EFF;
+  &.is-dragging {
+    border-color: #409eff;
+    background-color: rgba(64, 158, 255, 0.06);
+  }
+  
+  h3 {
+    margin: 20px 0;
+    color: #606266;
+  }
+  
+  .upload-icon {
+    color: #c0c4cc;
+  }
+  
+  .upload-hint {
+    margin-top: 20px;
+    color: #909399;
+    font-size: 14px;
   }
 }
 
-.upload-icon {
-  font-size: 48px;
-  color: #c0c4cc;
-  margin-bottom: 16px;
-}
-
-.upload-text {
-  font-size: 16px;
-  color: #606266;
-  margin-bottom: 8px;
-}
-
-.upload-hint {
-  font-size: 14px;
-  color: #909399;
+.file-input {
+  display: none;
 }
 
 .selected-file {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 24px;
+  text-align: left;
   
-  .preview-image {
-    width: 100px;
-    height: 100px;
+  .preview-container {
+    width: 200px;
+    height: 200px;
     overflow: hidden;
     border-radius: 4px;
-    margin-right: 16px;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
     
-    img {
+    .preview-image {
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -443,124 +376,59 @@ const formatDate = (date: Date | string): string => {
   
   .file-info {
     flex: 1;
-    text-align: left;
     
-    h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-    }
-    
-    p {
-      margin: 0;
-      color: #909399;
-      font-size: 14px;
-    }
-  }
-}
-
-.upload-progress {
-  margin-top: 24px;
-  
-  .progress-header {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 14px;
-  }
-  
-  .upload-stats {
-    margin-top: 16px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 14px;
-    color: #606266;
-    
-    p {
-      margin: 0;
-    }
-  }
-  
-  .upload-actions {
-    margin-top: 16px;
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-  }
-}
-
-.photo-form {
-  margin-top: 24px;
-}
-
-.saved-uploads {
-  margin-top: 40px;
-  
-  h3 {
-    font-size: 18px;
-    margin-bottom: 8px;
-  }
-  
-  p {
-    color: #606266;
-    margin-bottom: 16px;
-  }
-  
-  .saved-tasks-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
-  }
-  
-  .saved-task-item {
-    display: flex;
-    flex-direction: column;
-    
-    .saved-task-info {
-      flex: 1;
+    .file-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
       
-      h4 {
-        margin: 0 0 8px;
-        font-size: 16px;
+      h3 {
+        margin: 0;
+        color: #303133;
       }
+    }
+    
+    p {
+      color: #606266;
+      margin-bottom: 20px;
+    }
+    
+    .photo-form {
+      margin: 20px 0;
+    }
+    
+    .setting-hint {
+      font-size: 12px;
+      color: #909399;
+      margin-top: 5px;
+    }
+    
+    .upload-progress {
+      margin: 20px 0;
       
       p {
-        margin: 0 0 8px;
-        color: #909399;
-        font-size: 14px;
+        margin-top: 8px;
+        text-align: center;
       }
     }
     
-    .saved-task-actions {
+    .upload-actions {
       display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 16px;
+      gap: 12px;
     }
   }
 }
 
 @media (max-width: 768px) {
-  .upload-area {
-    padding: 20px;
-  }
-  
   .selected-file {
     flex-direction: column;
     
-    .preview-image {
-      margin-right: 0;
-      margin-bottom: 16px;
+    .preview-container {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1/1;
     }
-    
-    .file-info {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-  }
-  
-  .upload-stats {
-    flex-direction: column;
-    gap: 8px;
   }
 }
 </style> 

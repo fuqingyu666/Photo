@@ -1,8 +1,5 @@
--- Database connection with username 'root' and password '123456'
--- Create the database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS photo_app CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE photo_app;
+-- Creating tables directly in the 'photo' database
+-- This assumes the connection is already made to the 'photo' database
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
@@ -29,6 +26,8 @@ CREATE TABLE IF NOT EXISTS photos (
   file_hash VARCHAR(32) NOT NULL,
   width INT,
   height INT,
+  is_private BOOLEAN DEFAULT FALSE,
+  is_shared BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

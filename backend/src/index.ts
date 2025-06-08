@@ -47,7 +47,8 @@ try {
 }
 
 // Middleware
-app.use(helmet());
+// Removed helmet temporarily as it can cause CORS issues with images
+// app.use(helmet());
 app.use(cors({
     origin: '*',
     credentials: true
@@ -56,8 +57,12 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static files
-app.use('/uploads', express.static(path.join(env.UPLOAD_DIR)));
+// Static files with CORS configuration
+app.use('/uploads', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+}, express.static(path.join(env.UPLOAD_DIR)));
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -4,7 +4,7 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
     {
         path: '/',
-        redirect: '/login'
+        redirect: '/home'
     },
     {
         path: '/login',
@@ -83,7 +83,7 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
     // Set the page title
-    document.title = `${to.meta.title} - Photo App` || 'Photo App'
+    document.title = `${to.meta.title} - 相册共享云平台` || '相册共享云平台'
 
     // Check if the route requires authentication
     if (to.meta.requiresAuth) {

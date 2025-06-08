@@ -4,7 +4,7 @@
       <div class="register-header">
         <img src="/favicon.svg" alt="Logo" class="register-logo" />
         <h1 class="register-title">注册</h1>
-        <p class="register-subtitle">创建您的账号</p>
+        <p class="register-subtitle">相册共享云平台</p>
       </div>
       
       <form @submit.prevent="handleRegister" class="register-form">

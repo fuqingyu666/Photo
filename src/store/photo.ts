@@ -24,6 +24,8 @@ export interface Photo {
     likes: number
     liked: boolean
     comments: PhotoComment[]
+    isPrivate?: boolean
+    isShared?: boolean
 }
 
 // Generate mock data
@@ -42,6 +44,10 @@ const generateMockPhotos = (): Photo[] => {
         const userIndex = Math.floor(Math.random() * mockUsers.length)
         const user = mockUsers[userIndex]
         const photoId = `photo-${i + 1}`
+
+        // 随机决定是否为私有照片和是否共享
+        const isPrivate = Math.random() < 0.3 // 30%的照片为私有
+        const isShared = !isPrivate && Math.random() < 0.7 // 对于非私有照片，70%是共享的
 
         // Generate 0-5 random comments
         const comments: PhotoComment[] = []
@@ -73,7 +79,9 @@ const generateMockPhotos = (): Photo[] => {
             createdAt: new Date(Date.now() - Math.floor(Math.random() * 10000000)),
             likes: Math.floor(Math.random() * 100),
             liked: Math.random() > 0.5,
-            comments
+            comments,
+            isPrivate,
+            isShared
         })
     }
 
@@ -84,6 +92,7 @@ const generateMockPhotos = (): Photo[] => {
 export const usePhotoStore = defineStore('photo', () => {
     // State
     const photos = ref<Photo[]>([])
+    const userPhotos = ref<Photo[]>([])
     const sharedPhotos = ref<Photo[]>([])
     const currentPhoto = ref<Photo | null>(null)
     const loading = ref(false)
@@ -135,24 +144,73 @@ export const usePhotoStore = defineStore('photo', () => {
         }
     }
 
-    // Get shared photos
-    const getSharedPhotos = async (page: number = 1, limit: number = 20) => {
+    // 获取用户照片（包括私有和共享）
+    const fetchUserPhotos = async (userId?: string) => {
+        if (!userId) {
+            userPhotos.value = []
+            return []
+        }
+
         loading.value = true
         error.value = ''
 
         try {
-            const response = await photoApi.getSharedPhotos(page, limit)
-
-            if (page === 1) {
-                sharedPhotos.value = response.photos
-            } else {
-                sharedPhotos.value = [...sharedPhotos.value, ...response.photos]
-            }
-
-            sharedPagination.value = response.pagination
-            return response.photos
+            // 调用实际API获取用户照片
+            const response = await photoApi.getUserPhotos(1, 100)
+            userPhotos.value = response.photos.map(photo => ({
+                id: photo.id,
+                userId: photo.user_id,
+                username: photo.username || 'User',
+                userAvatar: '',
+                title: photo.title,
+                description: photo.description || '',
+                imageUrl: photo.url,
+                createdAt: new Date(photo.created_at || Date.now()),
+                likes: 0,
+                liked: false,
+                comments: [],
+                isPrivate: !!photo.is_private,
+                isShared: !!photo.is_shared
+            }))
+            return userPhotos.value
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to get shared photos'
+            console.error('Error fetching user photos:', err)
+            error.value = err?.message || 'Failed to fetch user photos'
+            userPhotos.value = [] // 确保即使出错也是空数组而不是null
+            return []
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // 获取共享照片
+    const fetchSharedPhotos = async () => {
+        loading.value = true
+        error.value = ''
+
+        try {
+            // 调用实际API获取共享照片
+            const response = await photoApi.getSharedPhotos(1, 100)
+            sharedPhotos.value = response.photos.map(photo => ({
+                id: photo.id,
+                userId: photo.user_id,
+                username: photo.username || 'User',
+                userAvatar: '',
+                title: photo.title,
+                description: photo.description || '',
+                imageUrl: photo.url,
+                createdAt: new Date(photo.created_at || Date.now()),
+                likes: 0,
+                liked: false,
+                comments: [],
+                isPrivate: false,
+                isShared: true
+            }))
+            return sharedPhotos.value
+        } catch (err: any) {
+            console.error('Error fetching shared photos:', err)
+            error.value = err?.message || 'Failed to fetch shared photos'
+            sharedPhotos.value = []
             return []
         } finally {
             loading.value = false
@@ -194,31 +252,37 @@ export const usePhotoStore = defineStore('photo', () => {
     }
 
     // Update photo
-    const updatePhoto = async (id: string, data: PhotoUpdate) => {
-        loading.value = true
-        error.value = ''
-
-        try {
-            const updatedPhoto = await photoApi.updatePhoto(id, data)
-
-            // Update in photos array
-            const index = photos.value.findIndex(p => p.id === id)
-            if (index !== -1) {
-                photos.value[index] = updatedPhoto
-            }
-
-            // Update current photo if it's the same
-            if (currentPhoto.value && currentPhoto.value.id === id) {
-                currentPhoto.value = updatedPhoto
-            }
-
-            return updatedPhoto
-        } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to update photo'
-            return null
-        } finally {
-            loading.value = false
+    const updatePhoto = async (id: string, data: Partial<Photo>) => {
+        // 在photos数组中查找并更新照片
+        const photoIndex = photos.value.findIndex(p => p.id === id);
+        if (photoIndex !== -1) {
+            photos.value[photoIndex] = { ...photos.value[photoIndex], ...data };
         }
+
+        // 在userPhotos数组中查找并更新照片
+        const userPhotoIndex = userPhotos.value.findIndex(p => p.id === id);
+        if (userPhotoIndex !== -1) {
+            userPhotos.value[userPhotoIndex] = { ...userPhotos.value[userPhotoIndex], ...data };
+        }
+
+        // 处理共享状态更改
+        const updatedPhoto = photos.value.find(p => p.id === id);
+        if (updatedPhoto) {
+            // 如果照片变成私有或不共享，从共享列表中移除
+            if (updatedPhoto.isPrivate || !updatedPhoto.isShared) {
+                sharedPhotos.value = sharedPhotos.value.filter(p => p.id !== id);
+            } else {
+                // 如果照片变成共享且非私有，确保它在共享列表中
+                const sharedIndex = sharedPhotos.value.findIndex(p => p.id === id);
+                if (sharedIndex === -1) {
+                    sharedPhotos.value.push(updatedPhoto);
+                } else {
+                    sharedPhotos.value[sharedIndex] = updatedPhoto;
+                }
+            }
+        }
+
+        return updatedPhoto || null;
     }
 
     // Delete photo
@@ -297,9 +361,53 @@ export const usePhotoStore = defineStore('photo', () => {
         }
     }
 
+    // 添加照片
+    const addPhoto = (data: {
+        userId: string;
+        username: string;
+        userAvatar: string;
+        title: string;
+        description: string;
+        imageUrl: string;
+        isPrivate?: boolean;
+        isShared?: boolean;
+    }): Photo => {
+        const newPhoto: Photo = {
+            id: `photo-${Date.now()}`,
+            userId: data.userId,
+            username: data.username,
+            userAvatar: data.userAvatar,
+            title: data.title || '未命名照片',
+            description: data.description || '',
+            imageUrl: data.imageUrl,
+            createdAt: new Date(),
+            likes: 0,
+            liked: false,
+            comments: [],
+            isPrivate: data.isPrivate || false,
+            isShared: data.isShared !== undefined ? data.isShared : true
+        };
+
+        // 添加到照片列表
+        photos.value = [newPhoto, ...photos.value];
+
+        // 如果是当前用户的照片，也添加到用户照片列表
+        if (data.userId === userPhotos.value[0]?.userId) {
+            userPhotos.value = [newPhoto, ...userPhotos.value];
+        }
+
+        // 如果是共享照片，添加到共享照片列表
+        if (newPhoto.isShared && !newPhoto.isPrivate) {
+            sharedPhotos.value = [newPhoto, ...sharedPhotos.value];
+        }
+
+        return newPhoto;
+    };
+
     return {
         // State
         photos,
+        userPhotos,
         sharedPhotos,
         currentPhoto,
         loading,
@@ -313,13 +421,15 @@ export const usePhotoStore = defineStore('photo', () => {
 
         // Actions
         getUserPhotos,
-        getSharedPhotos,
+        fetchUserPhotos,
+        fetchSharedPhotos,
         getPhotoById,
         createPhoto,
         updatePhoto,
         deletePhoto,
         sharePhoto,
         unsharePhoto,
-        reset
+        reset,
+        addPhoto
     }
 }) 

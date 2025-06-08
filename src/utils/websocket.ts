@@ -44,27 +44,23 @@ class WebSocketService {
     // Connect to WebSocket server
     connect(): Promise<boolean> {
         return new Promise((resolve) => {
-            if (this.socket && this.connected) {
+            if (this.connected && this.socket) {
                 resolve(true)
                 return
             }
 
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout)
+                this.reconnectTimeout = null
+            }
+
             try {
-                // Create socket connection
                 this.socket = io(WS_URL, {
-                    reconnection: false, // We'll handle reconnection manually
-                    timeout: 10000,
-                    transports: ['websocket', 'polling'],
-                    query: {
-                        // Add authentication token if available
-                        token: localStorage.getItem('token') || ''
-                    }
+                    transports: ['websocket'],
+                    reconnection: false, // We'll handle reconnection ourselves
+                    timeout: 10000 // 10 seconds
                 })
 
-                // Setup event listeners
-                this.setupSocketListeners()
-
-                // Handle connection events
                 this.socket.on('connect', () => {
                     console.log('WebSocket connected')
                     this.connected = true
@@ -73,28 +69,26 @@ class WebSocketService {
                     resolve(true)
                 })
 
-                this.socket.on('connect_error', (error) => {
+                this.socket.on('disconnect', () => {
+                    console.log('WebSocket disconnected')
+                    this.connected = false
+                    this.notifyConnectionListeners(false)
+                    this.reconnect()
+                })
+
+                this.socket.on('connect_error', (error: Error) => {
                     console.error('WebSocket connection error:', error)
                     this.connected = false
                     this.notifyConnectionListeners(false)
-                    this.attemptReconnect()
+                    this.reconnect()
                     resolve(false)
                 })
 
-                this.socket.on('disconnect', (reason) => {
-                    console.log('WebSocket disconnected:', reason)
-                    this.connected = false
-                    this.notifyConnectionListeners(false)
-
-                    // Attempt to reconnect if the disconnection wasn't intentional
-                    if (reason !== 'io client disconnect') {
-                        this.attemptReconnect()
-                    }
-                })
+                this.setupSocketListeners()
             } catch (error) {
-                console.error('Error initializing WebSocket:', error)
+                console.error('Error setting up WebSocket:', error)
                 this.connected = false
-                this.attemptReconnect()
+                this.reconnect()
                 resolve(false)
             }
         })

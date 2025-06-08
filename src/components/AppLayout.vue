@@ -4,7 +4,7 @@
       <div class="header-container">
         <div class="header-logo" @click="goToHome">
           <img src="/favicon.svg" alt="Logo" class="logo-img" />
-          <span>照片管理</span>
+          <span>相册共享云平台</span>
         </div>
         
         <nav class="header-nav">
@@ -51,7 +51,7 @@
     
     <footer class="app-footer">
       <div class="footer-container">
-        <p>&copy; {{ currentYear }} 照片管理应用 | 由 Vue 3 + TypeScript 构建</p>
+        <p></p>
       </div>
     </footer>
   </div>

@@ -12,12 +12,34 @@
           
           <el-input
             v-model="searchQuery"
-            placeholder="搜索图片..."
-            prefix-icon="el-icon-search"
+            placeholder="搜索照片..."
+            class="search-input"
             clearable
             @clear="handleSearchClear"
-            class="search-input"
-          />
+          >
+            <template #prefix>
+              <el-icon class="el-input__icon"><Search /></el-icon>
+            </template>
+          </el-input>
+          
+          <!-- 用户菜单 -->
+          <el-dropdown @command="(command) => command === 'logout' ? logout() : updateAvatar()">
+            <el-avatar :size="40" :src="authStore.user?.avatar">
+              {{ authStore.user?.username.charAt(0).toUpperCase() }}
+            </el-avatar>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="avatar">
+                  <el-icon><Setting /></el-icon>
+                  设置头像
+                </el-dropdown-item>
+                <el-dropdown-item command="logout">
+                  <el-icon><Switch /></el-icon>
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
       
@@ -37,42 +59,50 @@
       </div>
       
       <div v-else class="photo-grid">
-        <div 
-          v-for="photo in filteredPhotos" 
-          :key="photo.id" 
-          class="photo-item"
-          @click="viewPhotoDetails(photo)"
-        >
+        <div v-for="photo in filteredPhotos" :key="photo.id" class="photo-item">
           <div class="photo-card">
-            <div class="photo-image">
-              <img :src="photo.url" :alt="photo.name" />
+            <div class="photo-image" @click="viewPhotoDetails(photo)">
+              <template v-if="photo.imageUrl">
+                <img :src="photo.imageUrl" :alt="photo.title">
+                
+                <!-- 隐私标记 -->
+                <div v-if="photo.isPrivate" class="privacy-badge private">
+                  <el-icon><Lock /></el-icon>
+                </div>
+                <div v-else-if="photo.isShared" class="privacy-badge shared">
+                  <el-icon><Share /></el-icon>
+                </div>
+              </template>
+              <template v-else>
+                <el-icon :size="64" class="placeholder-icon"><Picture /></el-icon>
+              </template>
             </div>
+            
             <div class="photo-info">
-              <h3 class="photo-name" :title="photo.name">{{ photo.name }}</h3>
+              <h3 class="photo-name">{{ photo.title }}</h3>
               <p class="photo-date">{{ formatDate(photo.createdAt) }}</p>
             </div>
+            
             <div class="photo-actions">
-              <el-button 
-                type="text" 
-                size="small"
-                @click.stop="sharePhoto(photo)"
-              >
-                <el-icon><share /></el-icon> 分享
+              <el-button text @click="togglePrivacy(photo)" :title="photo.isPrivate ? '设为公开' : '设为私有'">
+                <el-icon>
+                  <Lock v-if="photo.isPrivate" />
+                  <Unlock v-else />
+                </el-icon>
+                {{ photo.isPrivate ? '私有' : '公开' }}
               </el-button>
-              <el-button 
-                type="text" 
-                size="small"
-                @click.stop="downloadPhoto(photo)"
-              >
-                <el-icon><download /></el-icon> 下载
+              
+              <el-button text @click="toggleShared(photo)" :disabled="photo.isPrivate" :title="photo.isShared ? '取消共享' : '共享'">
+                <el-icon><Share /></el-icon>
+                {{ photo.isShared ? '已共享' : '共享' }}
               </el-button>
-              <el-button 
-                type="text" 
-                size="small" 
-                class="danger"
-                @click.stop="confirmDelete(photo)"
-              >
-                <el-icon><delete /></el-icon> 删除
+              
+              <el-button text @click="downloadPhoto(photo)">
+                <el-icon><Download /></el-icon> 下载
+              </el-button>
+              
+              <el-button text class="danger" @click="confirmDelete(photo)">
+                <el-icon><Delete /></el-icon> 删除
               </el-button>
             </div>
           </div>
@@ -117,7 +147,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Share, Download, Delete } from '@element-plus/icons-vue';
+import { Share, Download, Delete, Picture, Setting, Lock, Unlock, Switch, Search } from '@element-plus/icons-vue';
 import AppLayout from '../components/AppLayout.vue';
 import { usePhotoStore } from '../store/photo';
 import { useAuthStore } from '../store/auth';
@@ -135,6 +165,9 @@ const shareLink = ref('');
 const currentPhotoId = ref('');
 const shareWithPassword = ref(false);
 const sharePassword = ref('');
+
+// 用户菜单状态
+const userMenuVisible = ref(false);
 
 // 获取已排序和过滤后的照片
 const filteredPhotos = computed(() => {
@@ -177,7 +210,15 @@ const formatDate = (date: Date | string) => {
 
 // 查看照片详情
 const viewPhotoDetails = (photo: any) => {
-  router.push(`/photo/${photo.id}`);
+  // 如果照片有URL，则直接在新标签打开图片
+  if (photo.url) {
+    window.open(photo.url, '_blank');
+  } else if (photo.imageUrl) {
+    window.open(photo.imageUrl, '_blank');
+  } else {
+    // 如果没有URL，则跳转到详情页
+    router.push(`/photo/${photo.id}`);
+  }
 };
 
 // 分享照片
@@ -220,6 +261,66 @@ const downloadPhoto = (photo: any) => {
   ElMessage.success('照片开始下载');
 };
 
+// 切换照片的隐私设置
+const togglePrivacy = (photo: any) => {
+  const newStatus = !photo.isPrivate;
+  
+  // 如果照片变为私有，则也取消共享
+  const updatedPhoto = {
+    ...photo,
+    isPrivate: newStatus,
+    isShared: newStatus ? false : photo.isShared
+  };
+  
+  // 更新照片
+  photoStore.updatePhoto(photo.id, updatedPhoto);
+  
+  ElMessage.success(`照片已${newStatus ? '设为私有' : '设为公开'}`);
+};
+
+// 切换照片的共享设置
+const toggleShared = async (photo: any) => {
+  // 如果照片是私有的，不能共享
+  if (photo.isPrivate) {
+    ElMessage.warning('私有照片不能共享，请先将其设为公开');
+    return;
+  }
+  
+  const newStatus = !photo.isShared;
+  
+  try {
+    // 使用当前登录用户的ID进行共享
+    // 这样可以确保共享功能正常工作
+    if (authStore.user) {
+      if (newStatus) {
+        // 如果开启共享，与当前用户共享
+        await photoStore.sharePhoto(photo.id, authStore.user.id);
+      } else {
+        // 如果关闭共享，取消与当前用户的共享
+        await photoStore.unsharePhoto(photo.id, authStore.user.id);
+      }
+      
+      // 更新照片状态
+      await photoStore.updatePhoto(photo.id, {
+        ...photo,
+        isShared: newStatus
+      });
+      
+      // 如果成功开启共享，刷新共享照片列表
+      if (newStatus) {
+        await photoStore.fetchSharedPhotos();
+      }
+      
+      ElMessage.success(`照片已${newStatus ? '开启共享' : '关闭共享'}`);
+    } else {
+      ElMessage.error('需要登录才能共享照片');
+    }
+  } catch (error) {
+    console.error('更新共享状态失败:', error);
+    ElMessage.error('更新共享状态失败');
+  }
+};
+
 // 确认删除照片
 const confirmDelete = (photo: any) => {
   ElMessageBox.confirm(
@@ -241,6 +342,30 @@ const confirmDelete = (photo: any) => {
 // 清除搜索
 const handleSearchClear = () => {
   searchQuery.value = '';
+};
+
+// 退出登录
+const logout = () => {
+  ElMessageBox.confirm(
+    '确定要退出登录吗？',
+    '退出确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(() => {
+    authStore.logout();
+    router.push('/login');
+  }).catch(() => {
+    // 用户取消退出
+  });
+};
+
+// 更新用户头像
+const updateAvatar = () => {
+  // 这里可以打开头像设置弹窗
+  ElMessage.info('头像更新功能将在未来版本中开放');
 };
 
 // 组件挂载时加载图片数据
@@ -276,6 +401,7 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
   
   .sort-select {
     width: 140px;
@@ -327,6 +453,11 @@ onMounted(async () => {
 .photo-image {
   height: 200px;
   overflow: hidden;
+  background-color: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   
   img {
     width: 100%;
@@ -336,6 +467,31 @@ onMounted(async () => {
     
     &:hover {
       transform: scale(1.05);
+    }
+  }
+  
+  .placeholder-icon {
+    color: #c0c4cc;
+  }
+  
+  .privacy-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    
+    &.private {
+      background-color: #f56c6c;
+    }
+    
+    &.shared {
+      background-color: #67c23a;
     }
   }
 }
@@ -367,6 +523,8 @@ onMounted(async () => {
   border-top: 1px solid #f1f1f1;
   opacity: 0.7;
   transition: opacity 0.2s;
+  flex-wrap: wrap;
+  gap: 8px;
   
   .danger {
     color: #f56c6c;

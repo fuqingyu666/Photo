@@ -2,7 +2,7 @@
   <app-layout>
     <div class="ai-chat-page">
       <div class="page-header">
-        <h1>AI Photo Assistant</h1>
+        <h1>相册AI助手</h1>
       </div>
       
       <div class="ai-chat-container">
@@ -20,9 +20,9 @@
 
             <template v-else-if="messages.length === 0">
               <div class="empty-messages">
-                <el-icon class="empty-icon"><Chat /></el-icon>
-                <h3>Welcome to AI Photo Assistant</h3>
-                <p>Ask me anything about photography or your photos!</p>
+                <el-icon class="empty-icon"><ChatLineRound /></el-icon>
+                <h3>欢迎使用相册AI助手</h3>
+                <p>您可以询问任何关于摄影或照片的问题！</p>
                 <div class="suggestion-chips">
                   <div 
                     v-for="(suggestion, index) in messageSuggestions" 
@@ -100,7 +100,7 @@
               v-model="inputMessage"
               type="textarea"
               :rows="1"
-              :placeholder="isTyping ? 'AI is typing...' : 'Ask me anything about photos...'"
+              :placeholder="isTyping ? 'AI正在回复...' : '输入您想问的关于照片的问题...'"
               resize="none"
               :disabled="isTyping"
               @keydown.enter.exact.prevent="sendMessage(inputMessage)"
@@ -109,7 +109,7 @@
             />
             
             <div class="input-actions">
-              <el-tooltip content="Clear conversation" placement="top">
+              <el-tooltip content="清除对话" placement="top">
                 <el-button
                   circle
                   size="small"
@@ -140,9 +140,9 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue'
 import { useAiChatStore, ChatMessage } from '../store/ai-chat'
 import { useAuthStore } from '../store/auth'
-import { Chat, Position, Service, CircleClose, Delete, UserFilled } from '@element-plus/icons-vue'
+import { ChatLineRound, Position, Service, CircleClose, Delete, UserFilled } from '@element-plus/icons-vue'
 import { useWebSocketStatus } from '../hooks/useWebSocketStatus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import AppLayout from '../components/AppLayout.vue'
@@ -173,18 +173,18 @@ const messages = computed(() => aiChatStore.messages)
 
 // Message suggestions for empty state
 const messageSuggestions = [
-  "What makes a great landscape photo?",
-  "How can I improve my portrait photography?",
-  "Tips for night photography?",
-  "How do I use the rule of thirds?",
-  "What camera settings should I use for sunsets?"
+  "如何拍摄好看的风景照？",
+  "如何提高我的人像摄影技巧？",
+  "夜景摄影有哪些技巧？",
+  "如何运用三分法则？",
+  "拍摄日落时应该使用什么相机设置？"
 ]
 
 // Quick suggestions
 const quickSuggestions = [
-  "How can I improve my photos?",
-  "What is aperture?",
-  "Best settings for portrait photography"
+  "如何提高我的照片质量？",
+  "什么是光圈？",
+  "人像摄影的最佳设置"
 ]
 
 // Format message with markdown and sanitize HTML
@@ -238,37 +238,52 @@ const scrollToBottom = async () => {
 
 // Send a message
 const sendMessage = async (message: string) => {
-  if (!message.trim()) return
+  if (!message.trim() && !isTyping.value) return
+  
+  if (isTyping.value) {
+    cancelStreaming()
+    return
+  }
   
   try {
-    // Reset input and state
-    const messageToSend = message.trim()
     inputMessage.value = ''
+    showSuggestions.value = false
     isSending.value = true
     isTyping.value = true
-    showSuggestions.value = false
     
-    // Add user message immediately
-    await aiChatStore.addUserMessage(messageToSend)
-    scrollToBottom()
+    // 添加用户消息
+    await aiChatStore.addUserMessage(message)
     
-    // Send message with streaming support
+    // 创建一个新的 AbortController 来控制流
     controller.value = new AbortController()
-    await aiChatStore.sendMessage(messageToSend, {
-      onStream: (chunk) => {
+    
+    // 使用流式响应
+    const result = await aiChatStore.sendMessage(message, {
+      onStream: (chunk: string) => {
+        // 流式更新不需要做任何事，因为store会自动更新消息
         scrollToBottom()
       },
       signal: controller.value.signal
     })
+    
+    if (!result) {
+      console.error('AI没有返回有效回复')
+      ElMessage.error('AI响应失败，请重试')
+    }
+    
+    // 自动滚动到底部
+    await nextTick()
+    scrollToBottom()
+    
   } catch (error) {
-    console.error('Error sending message:', error)
-    ElMessage.error('Failed to send message. Please try again.')
+    console.error('发送消息错误:', error)
+    ElMessage.error('发送消息失败，请重试')
   } finally {
-    isTyping.value = false
     isSending.value = false
+    isTyping.value = false
     controller.value = null
     
-    // Focus input after sending
+    // 聚焦输入框
     nextTick(() => {
       inputRef.value?.focus()
     })
@@ -278,21 +293,38 @@ const sendMessage = async (message: string) => {
 // Cancel streaming response
 const cancelStreaming = () => {
   if (controller.value) {
-    controller.value.abort()
-    controller.value = null
-    isTyping.value = false
+    controller.value.abort();
+    controller.value = null;
+    console.log('用户取消了AI响应');
+    isTyping.value = false;
     
-    // Add a note that response was canceled
-    aiChatStore.addSystemMessage('*Response cancelled by user*')
-    scrollToBottom()
+    // 给用户反馈
+    ElMessage.info('已停止AI响应');
+    
+    // 聚焦输入框
+    nextTick(() => {
+      inputRef.value?.focus();
+    });
   }
-}
+};
 
 // Clear conversation
 const clearConversation = () => {
-  aiChatStore.clearMessages()
-  showSuggestions.value = true
-}
+  ElMessageBox.confirm(
+    '确定要清除所有对话历史吗？这个操作不可撤销。',
+    '清除确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(() => {
+    aiChatStore.clearMessages();
+    ElMessage.success('对话历史已清除');
+  }).catch(() => {
+    // 用户取消操作
+  });
+};
 
 // Focus the input when component is mounted
 onMounted(async () => {
@@ -309,8 +341,8 @@ onMounted(async () => {
     // Scroll to bottom after loading history
     scrollToBottom()
   } catch (error) {
-    console.error('Error loading messages:', error)
-    ElMessage.error('Failed to load chat history')
+    console.error('加载历史消息错误:', error)
+    ElMessage.error('加载聊天历史失败')
   } finally {
     isLoadingHistory.value = false
   }

@@ -264,6 +264,9 @@ export const sharePhoto = async (req: Request, res: Response) => {
         // Share photo
         await PhotoModel.shareWithUser(photoId, req.user.id, sharedWithUserId);
 
+        // Also update the photo to mark it as shared
+        await PhotoModel.update(photoId, { is_shared: true });
+
         res.json({ message: 'Photo shared successfully' });
     } catch (error) {
         console.error('Error sharing photo:', error);

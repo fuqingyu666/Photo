@@ -8,10 +8,11 @@ const router = express.Router();
 router.use(authenticate as RequestHandler);
 
 // Initialize upload
-router.post('/init', uploadController.initUpload as RequestHandler);
+router.post('/init', uploadController.uploadMiddleware as RequestHandler, uploadController.initUpload as RequestHandler);
 
 // Upload chunk with multer middleware
 router.post('/chunk', uploadController.uploadMiddleware as RequestHandler, uploadController.uploadChunk as RequestHandler);
+router.post('/chunk/:id', uploadController.uploadMiddleware as RequestHandler, uploadController.uploadChunk as RequestHandler);
 
 // Complete upload
 router.post('/complete', uploadController.completeUpload as RequestHandler);

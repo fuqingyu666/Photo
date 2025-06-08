@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import mysql from 'mysql2/promise';
-import env from '../config/env';
 
 /**
  * Initialize the database with schema
@@ -10,13 +9,16 @@ async function initializeDatabase() {
     try {
         console.log('Initializing database...');
 
-        // Create connection without database name
+        // Create connection with database name
         const connection = await mysql.createConnection({
-            host: env.DB_HOST,
-            user: env.DB_USER,
-            password: '', // Use empty password
-            port: env.DB_PORT
+            host: 'localhost',
+            user: 'root',
+            password: '123456',
+            port: 3306,
+            database: 'photo'
         });
+
+        console.log('Connection established to photo database');
 
         // Read schema SQL file
         const schemaPath = path.join(__dirname, '../config/schema.sql');
@@ -27,11 +29,22 @@ async function initializeDatabase() {
             .split(';')
             .filter(statement => statement.trim().length > 0);
 
+        console.log(`Found ${statements.length} SQL statements to execute`);
+
         // Execute each statement
         for (const statement of statements) {
-            await connection.query(statement);
-            console.log('Executed SQL statement');
+            try {
+                await connection.query(statement);
+                console.log('Executed SQL statement successfully');
+            } catch (err) {
+                console.error('Error executing statement:', statement);
+                console.error('Error details:', err);
+            }
         }
+
+        // Verify tables were created
+        const [rows] = await connection.query('SHOW TABLES');
+        console.log('Tables in photo database:', rows);
 
         console.log('Database initialization complete');
         await connection.end();

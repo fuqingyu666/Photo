@@ -13,6 +13,8 @@ export interface Photo {
     file_hash: string;
     width?: number;
     height?: number;
+    is_private: boolean;
+    is_shared: boolean;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -32,6 +34,8 @@ export interface PhotoCreate {
     file_hash: string;
     width?: number;
     height?: number;
+    is_private?: boolean;
+    is_shared?: boolean;
 }
 
 export class PhotoModel {
@@ -51,23 +55,27 @@ export class PhotoModel {
             file_type,
             file_hash,
             width,
-            height
+            height,
+            is_private = false,
+            is_shared = true
         } = photoData;
 
         await pool.execute(
             `INSERT INTO photos (
         id, user_id, title, description, filename, original_filename, 
-        file_size, file_type, file_hash, width, height
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        file_size, file_type, file_hash, width, height, is_private, is_shared
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 id, user_id, title, description, filename, original_filename,
-                file_size, file_type, file_hash, width, height
+                file_size, file_type, file_hash, width, height, is_private ? 1 : 0, is_shared ? 1 : 0
             ]
         );
 
         return {
             id,
-            ...photoData
+            ...photoData,
+            is_private: !!is_private,
+            is_shared: is_shared !== false
         };
     }
 
@@ -105,8 +113,8 @@ export class PhotoModel {
      */
     static async findByUserId(userId: string, limit: number = 20, offset: number = 0): Promise<Photo[]> {
         const [rows] = await pool.execute(
-            'SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            [userId, limit, offset]
+            `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC LIMIT ${parseInt(String(limit))} OFFSET ${parseInt(String(offset))}`,
+            [userId]
         );
 
         return rows as Photo[];
@@ -133,10 +141,10 @@ export class PhotoModel {
        FROM photos p
        JOIN users u ON p.user_id = u.id
        JOIN photo_shares ps ON p.id = ps.photo_id
-       WHERE ps.shared_with = ?
+       WHERE ps.shared_with = ? AND p.is_shared = 1 AND p.is_private = 0
        ORDER BY ps.created_at DESC
-       LIMIT ? OFFSET ?`,
-            [userId, limit, offset]
+       LIMIT ${parseInt(String(limit))} OFFSET ${parseInt(String(offset))}`,
+            [userId]
         );
 
         return rows as PhotoWithUser[];
