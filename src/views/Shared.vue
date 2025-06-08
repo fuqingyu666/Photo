@@ -48,12 +48,12 @@
               shadow="hover"
             >
               <div class="photo-image" @click="viewPhotoDetail(photo)">
-                <img :src="photo.imageUrl" :alt="photo.title">
+                <img :src="photo.imageUrl" :alt="decodeText(photo.title)">
               </div>
               
               <div class="photo-info">
-                <h3 class="photo-title">{{ photo.title }}</h3>
-                <p class="photo-description">{{ truncateText(photo.description, 80) }}</p>
+                <h3 class="photo-title">{{ decodeText(photo.title) }}</h3>
+                <p class="photo-description">{{ truncateText(decodeText(photo.description), 80) }}</p>
                 
                 <div class="user-info">
                   <el-avatar :src="photo.userAvatar" :size="32">{{ photo.username.charAt(0).toUpperCase() }}</el-avatar>
@@ -65,11 +65,11 @@
                   <div class="photo-stats">
                     <span 
                       class="likes" 
-                      :class="{ 'liked': photo.liked }" 
-                      @click.stop="toggleLike(photo.id)"
+                      :class="{ 'liked': photo.isFavorite }" 
+                      @click.stop="toggleFavorite(photo.id)"
                     >
                       <el-icon><Star /></el-icon>
-                      {{ photo.likes }}
+                      {{ photo.isFavorite ? '已收藏' : '收藏' }}
                     </span>
                     <span class="comments">
                       <el-icon><ChatRound /></el-icon>
@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Star, ChatRound, Search } from '@element-plus/icons-vue'
@@ -100,6 +100,17 @@ const photoStore = usePhotoStore()
 const authStore = useAuthStore()
 const isLoading = ref(true)
 const searchQuery = ref('')
+let intervalChecker: number | null = null;
+
+// 解码文本，解决乱码问题
+const decodeText = (text: string): string => {
+  if (!text) return '';
+  try {
+    return decodeURIComponent(text);
+  } catch (e) {
+    return text;
+  }
+};
 
 // 基于搜索查询过滤照片
 const filteredPhotos = computed(() => {
@@ -112,17 +123,56 @@ const filteredPhotos = computed(() => {
   }
   
   const query = searchQuery.value.toLowerCase();
-  return photoStore.sharedPhotos.filter(photo => 
-    photo.title.toLowerCase().includes(query) || 
-    photo.description.toLowerCase().includes(query) ||
-    photo.username.toLowerCase().includes(query)
-  );
+  return photoStore.sharedPhotos.filter(photo => {
+    const decodedTitle = decodeText(photo.title).toLowerCase();
+    const decodedDescription = decodeText(photo.description).toLowerCase();
+    const username = photo.username.toLowerCase();
+    
+    return decodedTitle.includes(query) || 
+           decodedDescription.includes(query) || 
+           username.includes(query);
+  });
 });
+
+// 检查并移除私有照片
+const checkAndRemovePrivatePhotos = () => {
+  if (photoStore.sharedPhotos.length === 0) return;
+  
+  // 两层检查：
+  // 1. 任何标记为私有的照片
+  const privatePhotos = photoStore.sharedPhotos.filter(photo => photo.isPrivate);
+  
+  // 2. 检查用户照片中标记为私有的照片
+  const userPrivatePhotoIds = photoStore.userPhotos
+    .filter(p => p.isPrivate)
+    .map(p => p.id);
+  
+  // 合并这两种情况下需要移除的照片
+  const allPrivatePhotos = [
+    ...privatePhotos,
+    ...photoStore.sharedPhotos.filter(p => userPrivatePhotoIds.includes(p.id))
+  ];
+  
+  // 去重
+  const uniquePrivateIds = [...new Set(allPrivatePhotos.map(p => p.id))];
+  
+  if (uniquePrivateIds.length > 0) {
+    console.log(`Removing ${uniquePrivateIds.length} private photos from shared view`);
+    uniquePrivateIds.forEach(id => {
+      photoStore.removeFromSharedPhotos(id);
+    });
+  }
+};
 
 // 加载照片
 onMounted(async () => {
   try {
     await photoStore.fetchSharedPhotos();
+    // 立即进行一次检查
+    checkAndRemovePrivatePhotos();
+    
+    // 设置周期性检查（每10秒检查一次）
+    intervalChecker = window.setInterval(checkAndRemovePrivatePhotos, 10000);
   } catch (error) {
     ElMessage.error('加载共享照片失败');
   } finally {
@@ -130,22 +180,35 @@ onMounted(async () => {
   }
 });
 
+// 在组件销毁前清除定时器
+onBeforeUnmount(() => {
+  if (intervalChecker !== null) {
+    clearInterval(intervalChecker);
+    intervalChecker = null;
+  }
+});
+
+// 监听用户照片的变化，及时更新共享列表
+watch(() => photoStore.userPhotos, async (newPhotos) => {
+  if (newPhotos && newPhotos.length > 0) {
+    checkAndRemovePrivatePhotos();
+  }
+}, { deep: true });
+
+// 监听共享照片的变化
+watch(() => photoStore.sharedPhotos, async (newPhotos) => {
+  checkAndRemovePrivatePhotos();
+}, { deep: true });
+
 // 查看照片详情
 const viewPhotoDetail = (photo: any) => {
-  // 如果照片有URL，则直接在新标签打开图片
-  if (photo.url) {
-    window.open(photo.url, '_blank');
-  } else if (photo.imageUrl) {
-    window.open(photo.imageUrl, '_blank');
-  } else {
-    // 如果没有URL，则跳转到详情页
-    router.push(`/photo/${photo.id}`);
-  }
+  // 跳转到照片详情页
+  router.push(`/shared-photo/${photo.id}`);
 };
 
-// 切换照片点赞状态
-const toggleLike = (id: string) => {
-  photoStore.toggleLike(id);
+// 切换照片收藏状态
+const toggleFavorite = (id: string) => {
+  photoStore.toggleFavorite(id);
 };
 
 // 截断文本的辅助函数

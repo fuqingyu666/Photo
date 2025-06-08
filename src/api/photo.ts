@@ -31,6 +31,8 @@ export interface PhotoCreate {
 export interface PhotoUpdate {
     title?: string;
     description?: string;
+    is_private?: boolean;
+    is_shared?: boolean;
 }
 
 export interface PhotosResponse {
@@ -71,7 +73,7 @@ export const getUserPhotos = async (page: number = 1, limit: number = 20): Promi
  * Get shared photos with pagination
  */
 export const getSharedPhotos = async (page: number = 1, limit: number = 20): Promise<PhotosResponse> => {
-    const response = await api.get<PhotosResponse>(`/photos/shared?page=${page}&limit=${limit}`);
+    const response = await api.get<PhotosResponse>(`/photos/shared?page=${page}&limit=${limit}&exclude_private=true`);
     return response.data;
 };
 
@@ -143,4 +145,27 @@ export const searchUsers = async (query: string): Promise<UserSearchResult[]> =>
         console.error('Error searching users:', error);
         return [];
     }
+};
+
+/**
+ * Update photo settings
+ */
+export const updatePhotoSettings = async (id: string, settings: {
+    is_private?: boolean;
+    is_shared?: boolean;
+    title?: string;
+    description?: string;
+}): Promise<Photo> => {
+    // 直接使用标准的更新端点
+    const apiSettings: PhotoUpdate = {
+        title: settings.title,
+        description: settings.description,
+        // 添加其他设置属性，采用与API兼容的格式
+        is_private: settings.is_private,
+        is_shared: settings.is_shared
+    };
+
+    console.log(`Updating photo ${id} with settings:`, apiSettings);
+    const response = await api.put<{ photo: Photo }>(`/photos/${id}`, apiSettings);
+    return response.data.photo;
 }; 

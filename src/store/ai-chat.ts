@@ -383,6 +383,7 @@ export const useAiChatStore = defineStore('ai-chat', () => {
 
             // Then try to get from server in the background
             const response = await axios.get(`/api/ai/chat/history?limit=${limit}`, {
+                baseURL: "http://localhost:5000",
                 headers: {
                     'Authorization': `Bearer ${authStore.token}`
                 }

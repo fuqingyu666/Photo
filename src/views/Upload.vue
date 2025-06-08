@@ -25,7 +25,7 @@
                 class="file-input"
                 @change="handleFileSelect"
               />
-              <p class="upload-hint">支持JPG、PNG、GIF格式，最大50MB</p>
+              <p class="upload-hint">支持JPG、PNG、GIF格式</p>
             </template>
             
             <template v-else>
@@ -90,7 +90,7 @@
                       :percentage="uploadProgress"
                       :status="uploadStatus === 'error' ? 'exception' : undefined"
                     />
-                    <p>{{ uploadStatus === 'complete' ? '上传完成' : '上传中...' }}</p>
+                    <p>{{ uploadStatusText }}</p>
                   </div>
                   
                   <div class="upload-actions">
@@ -98,12 +98,20 @@
                       type="primary"
                       @click="startUpload"
                       :disabled="!canUpload || isUploading"
-                      :loading="isUploading"
+                      :loading="isUploading && !isPaused"
                     >
-                      开始上传
+                      {{ uploadButtonText }}
                     </el-button>
                     
-                    <el-button @click="removeFile" :disabled="isUploading">
+                    <el-button 
+                      v-if="isUploading" 
+                      @click="togglePause" 
+                      :type="isPaused ? 'primary' : 'default'"
+                    >
+                      {{ isPaused ? '继续' : '暂停' }}
+                    </el-button>
+                    
+                    <el-button @click="removeFile" :disabled="isUploading && !isPaused">
                       取消
                     </el-button>
                   </div>
@@ -125,7 +133,7 @@ import { UploadFilled, Close } from '@element-plus/icons-vue'
 import AppLayout from '../components/AppLayout.vue'
 import { useAuthStore } from '../store/auth'
 import { usePhotoStore } from '../store/photo'
-import { initUpload, uploadChunk, completeUpload } from '../api/upload'
+import { uploadFile } from '../api/upload'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -140,17 +148,36 @@ const photoForm = ref({
   isPrivate: false,
   isShared: true
 })
-const chunks = ref<Blob[]>([])
-const totalChunks = ref(0)
-const currentChunk = ref(0)
-const fileId = ref('')
-const uploadStatus = ref('pending')
+const uploadStatus = ref('pending') // pending, uploading, paused, complete, error
 const isDragging = ref(false)
 const isUploading = ref(false)
+const isPaused = ref(false)
 const uploadProgress = ref(0)
+const pauseSignal = ref({ paused: false })
 
 const canUpload = computed(() => {
   return selectedFile.value && photoForm.value.title.trim() !== ''
+})
+
+const uploadStatusText = computed(() => {
+  switch(uploadStatus.value) {
+    case 'pending': return '准备上传';
+    case 'uploading': return `上传中... ${uploadProgress.value}%`;
+    case 'paused': return '上传已暂停';
+    case 'complete': return '上传完成';
+    case 'error': return '上传失败';
+    default: return '';
+  }
+})
+
+const uploadButtonText = computed(() => {
+  if (isUploading.value) {
+    if (isPaused.value) {
+      return '继续上传';
+    }
+    return '上传中...';
+  }
+  return '开始上传';
 })
 
 const triggerFileInput = () => {
@@ -190,100 +217,153 @@ const handleFileSelect = (event: Event) => {
 }
 
 const selectFile = (file: File) => {
-  if (file.size > 50 * 1024 * 1024) {
-    ElMessage.error('文件大小超过50MB限制')
-    return
-  }
-  
   selectedFile.value = file
   
   // 创建本地文件预览URL
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    if (e.target?.result) {
-      previewUrl.value = e.target.result as string
-    }
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
   }
-  reader.readAsDataURL(file)
+  previewUrl.value = URL.createObjectURL(file)
   
-  photoForm.value.title = file.name.split('.')[0] || '未命名'
-  photoForm.value.description = ''
-  
-  prepareChunks(file)
-}
-
-const prepareChunks = (file: File) => {
-  const chunkSize = 1024 * 1024
-  totalChunks.value = Math.ceil(file.size / chunkSize)
-  chunks.value = []
-  
-  for (let i = 0; i < totalChunks.value; i++) {
-    const start = i * chunkSize
-    const end = Math.min(file.size, start + chunkSize)
-    chunks.value.push(file.slice(start, end))
+  // 自动设置标题为文件名，确保正确编码处理
+  if (!photoForm.value.title) {
+    const fileName = file.name.split('.').slice(0, -1).join('.')
+    // 为显示目的，这里不使用编码，仅保存文件名作为标题
+    photoForm.value.title = fileName
   }
-  
-  currentChunk.value = 0
 }
 
 const removeFile = () => {
+  if (isUploading.value && !isPaused.value) return
+  
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
+  
   selectedFile.value = null
-  previewUrl.value = ''
-  chunks.value = []
-  totalChunks.value = 0
-  currentChunk.value = 0
+  photoForm.value.title = ''
+  photoForm.value.description = ''
   uploadProgress.value = 0
-  fileId.value = ''
   uploadStatus.value = 'pending'
+  isUploading.value = false
+  isPaused.value = false
+}
+
+const togglePause = () => {
+  if (isPaused.value) {
+    // 继续上传
+    isPaused.value = false
+    pauseSignal.value.paused = false
+    uploadStatus.value = 'uploading'
+    startUpload()
+  } else {
+    // 暂停上传
+    isPaused.value = true
+    pauseSignal.value.paused = true
+    uploadStatus.value = 'paused'
+  }
 }
 
 const startUpload = async () => {
   if (!selectedFile.value || !canUpload.value) return
   
+  // 如果处于暂停状态并重新开始，则重置暂停标记
+  if (isPaused.value) {
+    isPaused.value = false
+    pauseSignal.value.paused = false
+  }
+  
   try {
     isUploading.value = true
     uploadStatus.value = 'uploading'
-    uploadProgress.value = 0
     
     console.log('开始上传文件:', selectedFile.value.name)
     
-    // 创建表单并直接添加文件
-    const formData = new FormData()
-    formData.append('chunk', selectedFile.value) // 作为chunk字段上传
+    // 使用新的uploadFile函数处理分块上传
+    const result = await uploadFile(
+      selectedFile.value, 
+      (progress) => {
+        uploadProgress.value = progress
+      },
+      pauseSignal.value
+    )
     
-    // 发送上传请求
-    const response = await initUpload(formData)
-    console.log('上传成功:', response)
+    // 检查上传结果
+    if (!result.success) {
+      if (isPaused.value) {
+        console.log('Upload paused, can be resumed later')
+        return
+      }
+      
+      throw new Error('Upload failed')
+    }
     
-    // 文件已经上传完成，直接使用返回的信息
+    console.log('上传成功:', result)
     uploadProgress.value = 100
     uploadStatus.value = 'complete'
     
-    // 上传完成，添加到照片库
-    if (authStore.user && response.photo) {
-      const newPhoto = photoStore.addPhoto({
-        userId: authStore.user.id,
-        username: authStore.user.username,
-        userAvatar: authStore.user.avatar || '',
-        title: photoForm.value.title || response.photo.title,
-        description: photoForm.value.description || '',
-        imageUrl: response.url,
-        isPrivate: photoForm.value.isPrivate,
-        isShared: photoForm.value.isShared
-      })
+    // 上传完成后的处理
+    if (authStore.user) {
+      // 尝试获取照片信息，可能通过不同的方式
+      let photoInfo = null;
       
-      ElMessage.success('照片上传成功')
-      router.push('/home')
+      if (result.photoId) {
+        try {
+          // 请求照片详情
+          await photoStore.fetchPhotoById(result.photoId);
+          photoInfo = photoStore.currentPhoto;
+        } catch (err) {
+          console.error('Error fetching photo details:', err);
+        }
+      }
+      
+      // 如果无法获取现有照片，则尝试创建一个新的
+      if (!photoInfo) {
+        photoStore.addPhoto({
+          userId: authStore.user.id,
+          username: authStore.user.username,
+          userAvatar: authStore.user.avatar || '',
+          title: encodeURIComponent(photoForm.value.title),
+          description: photoForm.value.description ? encodeURIComponent(photoForm.value.description) : '',
+          imageUrl: result.url || '', // 使用返回的URL
+          isPrivate: photoForm.value.isPrivate,
+          isShared: photoForm.value.isShared
+        });
+      }
+      
+      ElMessage({
+        message: '照片上传成功',
+        type: 'success',
+        duration: 2000
+      });
+      
+      // 短暂延迟后跳转，让用户看到成功提示
+      setTimeout(() => {
+        router.push('/home');
+      }, 1000);
     }
   } catch (error) {
-    console.error('上传失败:', error)
-    if (error.response) {
-      console.error('错误详情:', error.response.data)
+    console.error('上传失败:', error);
+    
+    // 显示更详细的错误信息
+    let errorMessage = '上传失败，请重试';
+    if (error.response?.data?.error) {
+      errorMessage += `：${error.response.data.error}`;
     }
-    ElMessage.error('上传失败，请重试')
-    uploadStatus.value = 'error'
+    
+    ElMessage({
+      message: errorMessage,
+      type: 'error',
+      duration: 5000
+    });
+    
+    uploadStatus.value = 'error';
   } finally {
-    isUploading.value = false
+    // 只有未暂停时才结束上传状态
+    if (!isPaused.value) {
+      isUploading.value = false;
+    }
   }
 }
 

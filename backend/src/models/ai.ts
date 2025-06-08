@@ -437,8 +437,11 @@ export class AIModel {
      * Get chat history for user
      */
     static async getChatHistory(userId: string, limit: number = 50): Promise<ChatMessage[]> {
+        // 确保limit是一个安全的数字
+        const safeLimit = Math.min(Math.max(1, parseInt(String(limit)) || 50), 100);
+
         const [rows] = await pool.execute(
-            `SELECT * FROM ai_chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ${parseInt(String(limit))}`,
+            `SELECT * FROM ai_chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ${safeLimit}`,
             [userId]
         );
 

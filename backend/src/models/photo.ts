@@ -112,8 +112,12 @@ export class PhotoModel {
      * Find photos by user ID
      */
     static async findByUserId(userId: string, limit: number = 20, offset: number = 0): Promise<Photo[]> {
+        // 确保limit和offset是安全的数字
+        const safeLimit = Math.min(Math.max(1, limit), 100);
+        const safeOffset = Math.max(0, offset);
+
         const [rows] = await pool.execute(
-            `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC LIMIT ${parseInt(String(limit))} OFFSET ${parseInt(String(offset))}`,
+            `SELECT * FROM photos WHERE user_id = ? ORDER BY created_at DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`,
             [userId]
         );
 
@@ -136,6 +140,10 @@ export class PhotoModel {
      * Find photos shared with user
      */
     static async findSharedWithUser(userId: string, limit: number = 20, offset: number = 0): Promise<PhotoWithUser[]> {
+        // 确保limit和offset是安全的数字
+        const safeLimit = Math.min(Math.max(1, limit), 100);
+        const safeOffset = Math.max(0, offset);
+
         const [rows] = await pool.execute(
             `SELECT p.*, u.username 
        FROM photos p
@@ -143,7 +151,7 @@ export class PhotoModel {
        JOIN photo_shares ps ON p.id = ps.photo_id
        WHERE ps.shared_with = ? AND p.is_shared = 1 AND p.is_private = 0
        ORDER BY ps.created_at DESC
-       LIMIT ${parseInt(String(limit))} OFFSET ${parseInt(String(offset))}`,
+       LIMIT ${safeLimit} OFFSET ${safeOffset}`,
             [userId]
         );
 

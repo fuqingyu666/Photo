@@ -23,15 +23,19 @@
           </el-input>
           
           <!-- 用户菜单 -->
-          <el-dropdown @command="(command) => command === 'logout' ? logout() : updateAvatar()">
-            <el-avatar :size="40" :src="authStore.user?.avatar">
-              {{ authStore.user?.username.charAt(0).toUpperCase() }}
-            </el-avatar>
+          <el-dropdown @command="handleCommand">
+            <div class="user-info-container">
+              <el-badge :value="photoStore.favoriteCount" :hidden="photoStore.favoriteCount === 0" class="fav-badge">
+                <el-avatar :size="40" :src="authStore.user?.avatar">
+                  {{ authStore.user?.username.charAt(0).toUpperCase() }}
+                </el-avatar>
+              </el-badge>
+            </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="avatar">
-                  <el-icon><Setting /></el-icon>
-                  设置头像
+                <el-dropdown-item command="favorites">
+                  <el-icon><Star /></el-icon>
+                  收藏 ({{ photoStore.favoriteCount }})
                 </el-dropdown-item>
                 <el-dropdown-item command="logout">
                   <el-icon><Switch /></el-icon>
@@ -147,7 +151,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Share, Download, Delete, Picture, Setting, Lock, Unlock, Switch, Search } from '@element-plus/icons-vue';
+import { Share, Download, Delete, Picture, Setting, Lock, Unlock, Switch, Search, Star } from '@element-plus/icons-vue';
 import AppLayout from '../components/AppLayout.vue';
 import { usePhotoStore } from '../store/photo';
 import { useAuthStore } from '../store/auth';
@@ -262,20 +266,45 @@ const downloadPhoto = (photo: any) => {
 };
 
 // 切换照片的隐私设置
-const togglePrivacy = (photo: any) => {
+const togglePrivacy = async (photo: any) => {
   const newStatus = !photo.isPrivate;
   
-  // 如果照片变为私有，则也取消共享
-  const updatedPhoto = {
-    ...photo,
-    isPrivate: newStatus,
-    isShared: newStatus ? false : photo.isShared
-  };
-  
-  // 更新照片
-  photoStore.updatePhoto(photo.id, updatedPhoto);
-  
-  ElMessage.success(`照片已${newStatus ? '设为私有' : '设为公开'}`);
+  try {
+    // 1. 先在本地更新状态
+    const updatedData = {
+      isPrivate: newStatus,
+      // 如果照片变为私有，则也取消共享
+      isShared: newStatus ? false : photo.isShared
+    };
+    
+    // 更新本地状态
+    photoStore.updatePhoto(photo.id, updatedData);
+    
+    // 2. 如果设为私有，立即从共享列表中移除
+    if (newStatus) {
+      photoStore.removeFromSharedPhotos(photo.id);
+      console.log(`Photo ${photo.id} marked as private, removed from shared list`);
+    }
+    
+    // 3. 然后调用API保存更改到服务器
+    try {
+      await photoStore.savePhotoSettings(photo.id, {
+        is_private: newStatus,
+        is_shared: newStatus ? false : photo.isShared
+      });
+      
+      // 4. 更新成功后刷新共享照片列表
+      await photoStore.fetchSharedPhotos();
+      
+      ElMessage.success(`照片已${newStatus ? '设为私有' : '设为公开'}`);
+    } catch (apiError) {
+      console.error('API请求失败，但本地状态已更新:', apiError);
+      ElMessage.warning('服务器同步失败，但已在本地应用更改');
+    }
+  } catch (error) {
+    console.error('更改隐私设置失败:', error);
+    ElMessage.error('更改隐私设置失败，请重试');
+  }
 };
 
 // 切换照片的共享设置
@@ -289,31 +318,45 @@ const toggleShared = async (photo: any) => {
   const newStatus = !photo.isShared;
   
   try {
-    // 使用当前登录用户的ID进行共享
-    // 这样可以确保共享功能正常工作
-    if (authStore.user) {
-      if (newStatus) {
-        // 如果开启共享，与当前用户共享
-        await photoStore.sharePhoto(photo.id, authStore.user.id);
-      } else {
-        // 如果关闭共享，取消与当前用户的共享
-        await photoStore.unsharePhoto(photo.id, authStore.user.id);
-      }
-      
-      // 更新照片状态
-      await photoStore.updatePhoto(photo.id, {
-        ...photo,
-        isShared: newStatus
-      });
-      
-      // 如果成功开启共享，刷新共享照片列表
-      if (newStatus) {
+    // 1. 先在本地更新状态
+    photoStore.updatePhoto(photo.id, {
+      isShared: newStatus
+    });
+    
+    // 2. 如果取消共享，立即从共享列表中移除
+    if (!newStatus) {
+      photoStore.removeFromSharedPhotos(photo.id);
+      console.log(`Photo ${photo.id} sharing disabled, removed from shared list`);
+    }
+    
+    // 3. 尝试通过API更新服务器状态
+    try {
+      // 使用当前登录用户的ID进行共享
+      if (authStore.user) {
+        // 更新服务器端设置
+        await photoStore.savePhotoSettings(photo.id, {
+          is_shared: newStatus
+        });
+        
+        // 通知共享状态
+        if (newStatus) {
+          // 如果开启共享，与当前用户共享
+          await photoStore.sharePhoto(photo.id, authStore.user.id);
+        } else {
+          // 如果关闭共享，取消与当前用户的共享
+          await photoStore.unsharePhoto(photo.id, authStore.user.id);
+        }
+        
+        // 刷新共享照片列表
         await photoStore.fetchSharedPhotos();
+        
+        ElMessage.success(`照片已${newStatus ? '开启共享' : '关闭共享'}`);
+      } else {
+        ElMessage.error('需要登录才能共享照片');
       }
-      
-      ElMessage.success(`照片已${newStatus ? '开启共享' : '关闭共享'}`);
-    } else {
-      ElMessage.error('需要登录才能共享照片');
+    } catch (apiError) {
+      console.error('API请求失败，但本地状态已更新:', apiError);
+      ElMessage.warning('服务器同步失败，但已在本地应用更改');
     }
   } catch (error) {
     console.error('更新共享状态失败:', error);
@@ -344,6 +387,16 @@ const handleSearchClear = () => {
   searchQuery.value = '';
 };
 
+// 处理用户菜单选项
+const handleCommand = (command: string) => {
+  if (command === 'logout') {
+    logout();
+  } else if (command === 'favorites') {
+    // 切换到收藏页面的处理逻辑，之后可以实现
+    ElMessage.info('收藏功能正在开发中，敬请期待');
+  }
+};
+
 // 退出登录
 const logout = () => {
   ElMessageBox.confirm(
@@ -360,12 +413,6 @@ const logout = () => {
   }).catch(() => {
     // 用户取消退出
   });
-};
-
-// 更新用户头像
-const updateAvatar = () => {
-  // 这里可以打开头像设置弹窗
-  ElMessage.info('头像更新功能将在未来版本中开放');
 };
 
 // 组件挂载时加载图片数据
@@ -568,5 +615,18 @@ onMounted(async () => {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
   }
+}
+
+.user-info-container {
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+}
+
+.fav-badge :deep(.el-badge__content) {
+  background-color: #ff7675;
+  border: none;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 </style> 

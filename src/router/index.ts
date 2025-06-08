@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+// 预加载共享照片详情组件
+import SharedPhotoDetail from '../views/SharedPhotoDetail.vue'
 
 const routes: RouteRecordRaw[] = [
     {
@@ -57,6 +59,15 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/Detail.vue'),
         meta: {
             title: 'Detail',
+            requiresAuth: true
+        }
+    },
+    {
+        path: '/shared-photo/:id',
+        name: 'SharedPhotoDetail',
+        component: SharedPhotoDetail,
+        meta: {
+            title: '照片详情',
             requiresAuth: true
         }
     },

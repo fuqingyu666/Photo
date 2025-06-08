@@ -14,10 +14,12 @@ import photoRoutes from './routes/photo';
 import uploadRoutes from './routes/upload';
 import shareRoutes from './routes/share';
 import aiRoutes from './routes/ai';
+import commentRoutes from './routes/comment';
 
 // Import socket.io controllers
 import { setSocketIO as setUploadSocketIO } from './controllers/upload';
 import { setSocketIO as setAiSocketIO } from './controllers/ai';
+import { setSocketIO as setCommentSocketIO } from './controllers/comment';
 
 // Create Express app
 const app = express();
@@ -35,6 +37,7 @@ const io = new Server(httpServer, {
 // Connect Socket.io with controllers
 setUploadSocketIO(io);
 setAiSocketIO(io);
+setCommentSocketIO(io);
 
 // Create uploads directory if it doesn't exist
 try {
@@ -70,6 +73,7 @@ app.use('/api/photos', photoRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/share', shareRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/comments', commentRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -88,6 +92,12 @@ io.on('connection', (socket) => {
     // Handle AI chat room
     socket.on('join-ai-chat', (userId) => {
         socket.join(`ai-chat-${userId}`);
+    });
+
+    // Handle photo comment room
+    socket.on('join-photo-room', (photoId) => {
+        socket.join(`photo-${photoId}`);
+        console.log(`User joined photo room: photo-${photoId}`);
     });
 
     // Handle disconnect

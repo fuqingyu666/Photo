@@ -1,5 +1,4 @@
--- Creating tables directly in the 'photo' database
--- This assumes the connection is already made to the 'photo' database
+USE photo;
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (

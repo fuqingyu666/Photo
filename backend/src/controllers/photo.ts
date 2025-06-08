@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PhotoModel } from '../models/photo';
 import { AIModel } from '../models/ai';
 import env from '../config/env';
+import pool from '../config/database';
 
 /**
  * Get all photos for the current user
@@ -56,9 +57,32 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 20;
         const offset = (page - 1) * limit;
 
-        // Get shared photos
-        const photos = await PhotoModel.findSharedWithUser(req.user.id, limit, offset);
-        const total = await PhotoModel.countSharedWithUser(req.user.id);
+        // 确保limit和offset是安全的数字
+        const safeLimit = Math.min(Math.max(1, limit), 100);
+        const safeOffset = Math.max(0, offset);
+
+        // Get all publicly shared photos that are not private
+        // Modified to get ALL shared photos, not just those directly shared with this user
+        const [rows] = await pool.execute(
+            `SELECT p.*, u.username 
+             FROM photos p
+             JOIN users u ON p.user_id = u.id
+             WHERE p.is_shared = 1 AND p.is_private = 0
+             ORDER BY p.created_at DESC
+             LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+            []
+        );
+
+        const photos = rows as any[];
+
+        // Count total shared photos
+        const [countRows] = await pool.execute(
+            `SELECT COUNT(*) as count 
+             FROM photos 
+             WHERE is_shared = 1 AND is_private = 0`
+        );
+
+        const total = (countRows as any[])[0].count;
 
         // Add photo URLs
         const photosWithUrls = photos.map(photo => ({
@@ -100,9 +124,10 @@ export const getPhotoById = async (req: Request, res: Response) => {
 
         // Check if user has access to this photo
         const isOwner = photo.user_id === req.user.id;
-        const isShared = await PhotoModel.isSharedWithUser(photoId, req.user.id);
+        const isSharedWithUser = await PhotoModel.isSharedWithUser(photoId, req.user.id);
+        const isPubliclyShared = photo.is_shared && !photo.is_private;
 
-        if (!isOwner && !isShared) {
+        if (!isOwner && !isSharedWithUser && !isPubliclyShared) {
             return res.status(403).json({ error: 'You do not have permission to view this photo' });
         }
 
@@ -113,7 +138,13 @@ export const getPhotoById = async (req: Request, res: Response) => {
         };
 
         // Get AI analysis if available
-        const analysis = await AIModel.findByPhotoId(photoId);
+        let analysis = null;
+        try {
+            analysis = await AIModel.findByPhotoId(photoId);
+        } catch (analysisError) {
+            console.error('Error retrieving AI analysis:', analysisError);
+            // Continue without AI analysis
+        }
 
         res.json({
             photo: photoWithUrl,

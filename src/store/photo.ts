@@ -26,6 +26,7 @@ export interface Photo {
     comments: PhotoComment[]
     isPrivate?: boolean
     isShared?: boolean
+    isFavorite?: boolean
 }
 
 // Generate mock data
@@ -109,6 +110,18 @@ export const usePhotoStore = defineStore('photo', () => {
         total: 0,
         pages: 0
     })
+    const favoritePhotos = ref<string[]>([])
+
+    // Load favorites from localStorage on init
+    const initFavorites = () => {
+        const savedFavorites = localStorage.getItem('favoritePhotos')
+        if (savedFavorites) {
+            favoritePhotos.value = JSON.parse(savedFavorites)
+        }
+    }
+
+    // Initialize favorites
+    initFavorites()
 
     // Getters
     const hasMorePhotos = computed(() => {
@@ -117,6 +130,10 @@ export const usePhotoStore = defineStore('photo', () => {
 
     const hasMoreSharedPhotos = computed(() => {
         return sharedPagination.value.page < sharedPagination.value.pages
+    })
+
+    const favoriteCount = computed(() => {
+        return favoritePhotos.value.length
     })
 
     // Actions
@@ -191,7 +208,12 @@ export const usePhotoStore = defineStore('photo', () => {
         try {
             // 调用实际API获取共享照片
             const response = await photoApi.getSharedPhotos(1, 100)
-            sharedPhotos.value = response.photos.map(photo => ({
+
+            // 强制在客户端过滤掉所有私有照片
+            const filteredPhotos = response.photos.filter(photo => !photo.is_private);
+            console.log(`Filtered out ${response.photos.length - filteredPhotos.length} private photos from shared list`);
+
+            sharedPhotos.value = filteredPhotos.map(photo => ({
                 id: photo.id,
                 userId: photo.user_id,
                 username: photo.username || 'User',
@@ -203,9 +225,28 @@ export const usePhotoStore = defineStore('photo', () => {
                 likes: 0,
                 liked: false,
                 comments: [],
-                isPrivate: false,
+                isPrivate: false, // 已经过滤，肯定是非私有
                 isShared: true
             }))
+
+            // 同步用户照片的收藏状态
+            for (const photo of sharedPhotos.value) {
+                photo.isFavorite = favoritePhotos.value.includes(photo.id);
+            }
+
+            // 额外检查：再次过滤掉用户照片中被标记为私有的照片
+            const userPrivatePhotoIds = userPhotos.value
+                .filter(p => p.isPrivate)
+                .map(p => p.id);
+
+            if (userPrivatePhotoIds.length > 0) {
+                // 如果有用户照片被标记为私有，从共享列表中移除它们
+                sharedPhotos.value = sharedPhotos.value.filter(
+                    photo => !userPrivatePhotoIds.includes(photo.id)
+                );
+                console.log(`Removed ${userPrivatePhotoIds.length} private user photos from shared list`);
+            }
+
             return sharedPhotos.value
         } catch (err: any) {
             console.error('Error fetching shared photos:', err)
@@ -342,6 +383,97 @@ export const usePhotoStore = defineStore('photo', () => {
         }
     }
 
+    // Toggle favorite status of a photo
+    const toggleFavorite = (photoId: string) => {
+        const index = favoritePhotos.value.indexOf(photoId)
+
+        // If already in favorites, remove it
+        if (index !== -1) {
+            favoritePhotos.value.splice(index, 1)
+        } else {
+            // Otherwise add it
+            favoritePhotos.value.push(photoId)
+        }
+
+        // Update UI state for this photo in all collections
+        updatePhotoFavoriteStatus(photoId)
+
+        // Save to localStorage
+        localStorage.setItem('favoritePhotos', JSON.stringify(favoritePhotos.value))
+    }
+
+    // Update isFavorite status for a photo in all collections
+    const updatePhotoFavoriteStatus = (photoId: string) => {
+        const isFavorite = favoritePhotos.value.includes(photoId)
+
+        // Update in photos collection
+        const photoIndex = photos.value.findIndex(p => p.id === photoId)
+        if (photoIndex !== -1) {
+            photos.value[photoIndex].isFavorite = isFavorite
+        }
+
+        // Update in userPhotos collection
+        const userPhotoIndex = userPhotos.value.findIndex(p => p.id === photoId)
+        if (userPhotoIndex !== -1) {
+            userPhotos.value[userPhotoIndex].isFavorite = isFavorite
+        }
+
+        // Update in sharedPhotos collection
+        const sharedPhotoIndex = sharedPhotos.value.findIndex(p => p.id === photoId)
+        if (sharedPhotoIndex !== -1) {
+            sharedPhotos.value[sharedPhotoIndex].isFavorite = isFavorite
+        }
+
+        // Update in currentPhoto if it's the same
+        if (currentPhoto.value && currentPhoto.value.id === photoId) {
+            currentPhoto.value.isFavorite = isFavorite
+        }
+    }
+
+    // Get the user's favorite photos
+    const getFavoritePhotos = async () => {
+        if (favoritePhotos.value.length === 0) {
+            return []
+        }
+
+        const favPhotos: Photo[] = []
+
+        // First collect all favorite photos from existing collections
+        for (const id of favoritePhotos.value) {
+            // Look in all our collections
+            const photo = photos.value.find(p => p.id === id) ||
+                userPhotos.value.find(p => p.id === id) ||
+                sharedPhotos.value.find(p => p.id === id)
+
+            if (photo) {
+                favPhotos.push({ ...photo, isFavorite: true })
+            }
+        }
+
+        // For any IDs we couldn't find in our collection, try to fetch individually
+        const missingIds = favoritePhotos.value.filter(
+            id => !favPhotos.find(p => p.id === id)
+        )
+
+        if (missingIds.length > 0) {
+            for (const id of missingIds) {
+                try {
+                    const result = await getPhotoById(id)
+                    if (result && result.photo) {
+                        favPhotos.push({
+                            ...result.photo,
+                            isFavorite: true
+                        })
+                    }
+                } catch (err) {
+                    console.error(`Failed to fetch favorite photo ${id}:`, err)
+                }
+            }
+        }
+
+        return favPhotos
+    }
+
     // Reset store
     const reset = () => {
         photos.value = []
@@ -359,6 +491,7 @@ export const usePhotoStore = defineStore('photo', () => {
             total: 0,
             pages: 0
         }
+        // Don't reset favorites as they should persist between sessions
     }
 
     // 添加照片
@@ -404,6 +537,80 @@ export const usePhotoStore = defineStore('photo', () => {
         return newPhoto;
     };
 
+    // 获取照片详情
+    const fetchPhotoById = async (id: string) => {
+        loading.value = true;
+        error.value = '';
+
+        try {
+            const result = await getPhotoById(id);
+            if (result && result.photo) {
+                currentPhoto.value = result.photo;
+                return result.photo;
+            }
+            return null;
+        } catch (err: any) {
+            console.error('Error fetching photo by ID:', err);
+            error.value = err?.message || 'Failed to fetch photo';
+            return null;
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    // 将照片设置保存到服务器
+    const savePhotoSettings = async (id: string, settings: {
+        is_private?: boolean,
+        is_shared?: boolean,
+        title?: string,
+        description?: string
+    }) => {
+        loading.value = true;
+        error.value = '';
+
+        try {
+            // 调用API将设置保存到服务器
+            const response = await photoApi.updatePhotoSettings(id, settings);
+
+            // 如果照片变成私有，立即从共享列表中移除
+            if (settings.is_private === true) {
+                removeFromSharedPhotos(id);
+            }
+
+            return response;
+        } catch (err: any) {
+            error.value = err.response?.data?.error || 'Failed to save photo settings';
+            console.error('Failed to save photo settings:', err);
+            return null;
+        } finally {
+            loading.value = false;
+        }
+    };
+
+    // 从共享照片列表中移除指定照片
+    const removeFromSharedPhotos = (id: string) => {
+        // 检查照片是否在共享列表中
+        const photoIndex = sharedPhotos.value.findIndex(photo => photo.id === id);
+        if (photoIndex !== -1) {
+            console.log(`Removing photo ${id} from shared photos list`);
+            // 从sharedPhotos数组中删除指定ID的照片
+            sharedPhotos.value.splice(photoIndex, 1);
+
+            // 同时确保在原始照片数据中标记为私有
+            const photoInList = photos.value.find(p => p.id === id);
+            if (photoInList) {
+                photoInList.isPrivate = true;
+                photoInList.isShared = false;
+            }
+
+            const userPhotoInList = userPhotos.value.find(p => p.id === id);
+            if (userPhotoInList) {
+                userPhotoInList.isPrivate = true;
+                userPhotoInList.isShared = false;
+            }
+        }
+    };
+
     return {
         // State
         photos,
@@ -414,10 +621,12 @@ export const usePhotoStore = defineStore('photo', () => {
         error,
         pagination,
         sharedPagination,
+        favoritePhotos,
 
         // Getters
         hasMorePhotos,
         hasMoreSharedPhotos,
+        favoriteCount,
 
         // Actions
         getUserPhotos,
@@ -426,10 +635,15 @@ export const usePhotoStore = defineStore('photo', () => {
         getPhotoById,
         createPhoto,
         updatePhoto,
+        savePhotoSettings,
+        removeFromSharedPhotos,
         deletePhoto,
         sharePhoto,
         unsharePhoto,
+        toggleFavorite,
+        getFavoritePhotos,
         reset,
-        addPhoto
+        addPhoto,
+        fetchPhotoById
     }
 }) 

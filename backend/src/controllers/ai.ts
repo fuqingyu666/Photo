@@ -226,10 +226,15 @@ export const getChatHistory = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Invalid limit parameter' });
         }
 
-        // Get chat history
-        const chatHistory = await AIModel.getChatHistory(req.user.id, limit);
-
-        res.json({ messages: chatHistory });
+        try {
+            // Get chat history
+            const chatHistory = await AIModel.getChatHistory(req.user.id, limit);
+            res.json({ messages: chatHistory });
+        } catch (dbError) {
+            console.error('Database error when getting chat history:', dbError);
+            // Return empty messages if table doesn't exist yet
+            res.json({ messages: [] });
+        }
     } catch (error) {
         console.error('Error getting chat history:', error);
         res.status(500).json({ error: 'Failed to get chat history' });
