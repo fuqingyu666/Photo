@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { getPhotoComments, createComment, deleteComment, Comment } from '../api/comment';
 import { useSocketStore } from './socket';
 import { useAuthStore } from './auth';
@@ -14,6 +14,36 @@ export const useCommentStore = defineStore('comment', () => {
     // Socket connection
     const socketStore = useSocketStore();
     const authStore = useAuthStore();
+
+    // Load persisted guest comments on initialization
+    const loadPersistedComments = (photoId: string) => {
+        const persistedComments = localStorage.getItem(`guest_comments_${photoId}`);
+        if (persistedComments) {
+            try {
+                const guestComments = JSON.parse(persistedComments);
+                return guestComments;
+            } catch (e) {
+                console.error('Error parsing persisted comments', e);
+                return [];
+            }
+        }
+        return [];
+    };
+
+    // Save guest comments to localStorage
+    const persistGuestComments = (photoId: string, commentsList: Comment[]) => {
+        const guestComments = commentsList.filter(c => c.user_id === 'guest');
+        if (guestComments.length > 0) {
+            localStorage.setItem(`guest_comments_${photoId}`, JSON.stringify(guestComments));
+        }
+    };
+
+    // Watch for changes to comments and persist guest comments
+    watch(comments, (newComments) => {
+        if (currentPhotoId.value) {
+            persistGuestComments(currentPhotoId.value, newComments);
+        }
+    }, { deep: true });
 
     /**
      * Connect to WebSocket for photo comments
@@ -63,10 +93,16 @@ export const useCommentStore = defineStore('comment', () => {
 
         try {
             const photoComments = await getPhotoComments(photoId);
-            comments.value = photoComments;
+
+            // Load guest comments from localStorage and merge them with API comments
+            const guestComments = loadPersistedComments(photoId);
+
+            // Merge both comment sources
+            comments.value = [...photoComments, ...guestComments];
         } catch (err: any) {
             error.value = err.message || 'Failed to load comments';
-            comments.value = [];
+            // Even if API call fails, try to load guest comments
+            comments.value = loadPersistedComments(photoId);
         } finally {
             loading.value = false;
         }
@@ -135,14 +171,14 @@ export const useCommentStore = defineStore('comment', () => {
     const removeUserComment = async (photoId: string, commentId: string): Promise<boolean> => {
         loading.value = true;
         error.value = null;
-        
+
         try {
             // 处理临时评论的删除
             if (commentId.startsWith('temp-')) {
                 removeComment(commentId);
                 return true;
             }
-            
+
             // 正常API删除评论
             const success = await deleteComment(photoId, commentId);
             if (success) {

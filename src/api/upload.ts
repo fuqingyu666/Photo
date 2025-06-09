@@ -361,30 +361,26 @@ export const completeUpload = async (uploadId: string, filename: string, totalCh
                 url: response.data.url || response.data.photo?.url
             };
         } catch (completionError) {
-            console.warn('Complete upload endpoint failed, trying alternative endpoints:', completionError);
+            console.warn('Complete upload endpoint failed, trying photos/finish-upload endpoint:', completionError);
 
-            // 尝试其他可能的端点
-            const alternativeEndpoints = [
-                '/photos/finish-upload',
-                '/upload/finish',
-                '/upload/finalize'
-            ];
-
-            for (const endpoint of alternativeEndpoints) {
-                try {
-                    console.log(`Trying alternative completion endpoint: ${endpoint}`);
-                    const altResponse = await api.post(endpoint, data);
-                    if (altResponse.data) {
-                        return {
-                            success: true,
-                            photoId: altResponse.data.photoId || altResponse.data.id || altResponse.data.photo?.id,
-                            url: altResponse.data.url || altResponse.data.photo?.url
-                        };
+            // 尝试photos/finish-upload端点 (确保带上认证token)
+            try {
+                const token = localStorage.getItem('token');
+                const altResponse = await api.post('/photos/finish-upload', data, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
                     }
-                } catch (e) {
-                    console.log(`Alternative endpoint ${endpoint} failed:`, e);
-                    // Continue with next endpoint
+                });
+                
+                if (altResponse.data) {
+                    return {
+                        success: true,
+                        photoId: altResponse.data.photoId || altResponse.data.id || altResponse.data.photo?.id,
+                        url: altResponse.data.url || altResponse.data.photo?.url
+                    };
                 }
+            } catch (e) {
+                console.log(`Photos finish-upload endpoint failed:`, e);
             }
 
             // 如果所有完成端点失败，尝试直接检查照片是否上传成功

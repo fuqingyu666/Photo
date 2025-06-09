@@ -75,6 +75,19 @@ app.use('/api/share', shareRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/comments', commentRoutes);
 
+// Add API endpoint aliases for compatibility with frontend
+app.use('/api/photos/upload', (req, res, next) => {
+    req.url = '/';
+    uploadRoutes(req, res, next);
+});
+
+// Fix the finish-upload endpoint to properly handle authentication
+const { authenticate } = require('./middleware/auth');
+app.use('/api/photos/finish-upload', authenticate, (req, res, next) => {
+    req.url = '/complete';
+    uploadRoutes(req, res, next);
+});
+
 // Health check route
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
