@@ -231,16 +231,16 @@ const commentText = ref('')
 const commentsSection = ref<HTMLElement | null>(null)
 const newCommentIds = ref<string[]>([])
 
-// Get photo ID from route params
+// 从路由参数获取照片ID
 const photoId = computed(() => route.params.id as string)
 
-// Get current photo
+// 获取当前照片
 const photo = computed(() => photoStore.currentPhoto)
 
-// Get user avatar
+// 获取用户头像
 const userAvatar = computed(() => authStore.user?.avatar || 'https://randomuser.me/api/portraits/lego/1.jpg')
 
-// Sort comments by date (newest first)
+// 按日期排序评论（最新的在前）
 const sortedComments = computed(() => {
   if (!photo.value) return []
   
@@ -249,7 +249,7 @@ const sortedComments = computed(() => {
   })
 })
 
-// Get related photos (same user or similar titles, excluding current photo)
+// 获取相关照片（同一用户或类似标题，排除当前照片）
 const relatedPhotos = computed(() => {
   if (!photo.value) return []
   
@@ -262,43 +262,43 @@ const relatedPhotos = computed(() => {
     .slice(0, 4)
 })
 
-// Check if comment is new
+// 检查评论是否是新评论
 const isNewComment = (commentId: string): boolean => {
   return newCommentIds.value.includes(commentId)
 }
 
-// Load photo details
+// 加载照片详情
 onMounted(async () => {
-  // Load photo
+  // 加载照片
   photoStore.getPhotoById(photoId.value)
   
-  // Simulate loading delay
+  // 模拟加载延迟
   setTimeout(() => {
     isLoading.value = false
   }, 800)
   
-  // Connect to WebSocket and subscribe to comments
+  // 连接WebSocket并订阅评论
   await webSocketService.connect()
   webSocketService.subscribeToComments(photoId.value)
   webSocketService.addCommentListener(handleNewComment)
 })
 
-// Clean up on component unmount
+// 组件卸载时清理
 onBeforeUnmount(() => {
   webSocketService.unsubscribeFromComments(photoId.value)
   webSocketService.removeCommentListener(handleNewComment)
 })
 
-// Handle new comment from WebSocket
+// 处理来自WebSocket的新评论
 const handleNewComment = (event: CommentEvent) => {
   if (event.photoId === photoId.value && photo.value) {
-    // Add comment to the photo
+    // 将评论添加到照片
     photo.value.comments.push(event.comment)
     
-    // Mark as new comment
+    // 标记为新评论
     newCommentIds.value.push(event.comment.id)
     
-    // Remove from new comments after 5 seconds
+    // 5秒后从新评论中移除
     setTimeout(() => {
       const index = newCommentIds.value.indexOf(event.comment.id)
       if (index !== -1) {
@@ -306,25 +306,25 @@ const handleNewComment = (event: CommentEvent) => {
       }
     }, 5000)
     
-    // Scroll to bottom of comments
+    // 滚动到评论底部
     nextTick(() => {
       scrollToComments()
     })
   }
 }
 
-// Toggle like on the photo
+// 切换照片点赞状态
 const toggleLike = () => {
   if (photo.value) {
     photoStore.toggleLike(photo.value.id)
   }
 }
 
-// Submit a new comment
+// 提交新评论
 const submitComment = () => {
   if (!commentText.value.trim() || !photo.value || !authStore.user) return
   
-  // Send comment via WebSocket
+  // 通过WebSocket发送评论
   webSocketService.sendComment(photo.value.id, {
     userId: authStore.user.id,
     username: authStore.user.username,
@@ -332,23 +332,23 @@ const submitComment = () => {
     content: commentText.value.trim()
   })
   
-  // Clear comment text
+  // 清空评论文本
   commentText.value = ''
 }
 
-// Scroll to comments section
+// 滚动到评论部分
 const scrollToComments = () => {
   if (commentsSection.value) {
     commentsSection.value.scrollIntoView({ behavior: 'smooth' })
   }
 }
 
-// View related photo
+// 查看相关照片
 const viewRelatedPhoto = (id: string) => {
   router.push(`/detail/${id}`)
 }
 
-// Format date
+// 格式化日期
 const formatDate = (date: Date): string => {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -359,7 +359,7 @@ const formatDate = (date: Date): string => {
   })
 }
 
-// Photo sharing functionality
+// 照片共享功能
 const showShareDialog = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
@@ -367,7 +367,7 @@ const sharedUsers = ref<any[]>([])
 const isSearching = ref(false)
 const shareError = ref('')
 
-// Open share dialog
+// 打开共享对话框
 const openShareDialog = async () => {
   showShareDialog.value = true
   searchQuery.value = ''
@@ -375,12 +375,12 @@ const openShareDialog = async () => {
   await loadSharedUsers()
 }
 
-// Close share dialog
+// 关闭共享对话框
 const closeShareDialog = () => {
   showShareDialog.value = false
 }
 
-// Load users who have access to this photo
+// 加载有权访问此照片的用户
 const loadSharedUsers = async () => {
   if (!photoStore.currentPhoto) return
   

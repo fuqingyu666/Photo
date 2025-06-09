@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client'
 import { PhotoComment } from '../store/photo'
 
-// WebSocket URL, replace with your actual backend URL in production
+// WebSocket 地址，在生产环境中替换为实际的后端URL
 const WS_URL = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:3001'
 
 export interface CommentEvent {
@@ -32,16 +32,16 @@ class WebSocketService {
     private reconnectAttempts = 0
     private maxReconnectAttempts = 5
     private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
-    private reconnectInterval = 5000 // 5 seconds
+    private reconnectInterval = 5000 // 5秒
 
-    // Event listeners
+    // 事件监听器
     private commentListeners: Map<string, Array<(event: CommentEvent) => void>> = new Map()
     private uploadProgressListeners: Map<string, Array<(event: UploadProgressEvent) => void>> = new Map()
     private uploadCompletedListeners: Map<string, Array<(event: UploadCompletedEvent) => void>> = new Map()
     private uploadStatusListeners: Map<string, Array<(event: UploadStatusEvent) => void>> = new Map()
     private connectionListeners: Array<(connected: boolean) => void> = []
 
-    // Connect to WebSocket server
+    // 连接到WebSocket服务器
     connect(): Promise<boolean> {
         return new Promise((resolve) => {
             if (this.connected && this.socket) {
@@ -57,8 +57,8 @@ class WebSocketService {
             try {
                 this.socket = io(WS_URL, {
                     transports: ['websocket'],
-                    reconnection: false, // We'll handle reconnection ourselves
-                    timeout: 10000 // 10 seconds
+                    reconnection: false, // 我们自己处理重连
+                    timeout: 10000 // 10秒
                 })
 
                 this.socket.on('connect', () => {
@@ -94,7 +94,7 @@ class WebSocketService {
         })
     }
 
-    // Attempt to reconnect
+    // 尝试重新连接
     private attemptReconnect(): void {
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout)
@@ -114,32 +114,32 @@ class WebSocketService {
         }, this.reconnectInterval * Math.min(this.reconnectAttempts, 3))
     }
 
-    // Setup socket event listeners
+    // 设置Socket事件监听器
     private setupSocketListeners(): void {
         if (!this.socket) return
 
-        // Comment events
+        // 评论事件
         this.socket.on('comment', (event: CommentEvent) => {
             this.notifyCommentListeners(event.photoId, event)
         })
 
-        // Upload progress events
+        // 上传进度事件
         this.socket.on('upload-progress', (event: UploadProgressEvent) => {
             this.notifyUploadProgressListeners(event.uploadId, event)
         })
 
-        // Upload completed events
+        // 上传完成事件
         this.socket.on('upload-completed', (event: UploadCompletedEvent) => {
             this.notifyUploadCompletedListeners(event.uploadId, event)
         })
 
-        // Upload status events
+        // 上传状态事件
         this.socket.on('upload-status-updated', (event: UploadStatusEvent) => {
             this.notifyUploadStatusListeners(event.uploadId, event)
         })
     }
 
-    // Disconnect from WebSocket server
+    // 断开与WebSocket服务器的连接
     disconnect(): void {
         if (this.socket) {
             this.socket.disconnect()
@@ -157,12 +157,12 @@ class WebSocketService {
         this.clearAllListeners()
     }
 
-    // Check connection status
+    // 检查连接状态
     isConnected(): boolean {
         return this.connected
     }
 
-    // Subscribe to comments for a specific photo
+    // 订阅特定照片的评论
     subscribeToComments(photoId: string): void {
         if (!this.connected || !this.socket) {
             this.connect().then(() => {
@@ -175,7 +175,7 @@ class WebSocketService {
         console.log(`Subscribed to comments for photo ${photoId}`)
     }
 
-    // Unsubscribe from comments for a specific photo
+    // 取消订阅特定照片的评论
     unsubscribeFromComments(photoId: string): void {
         if (!this.connected || !this.socket) return
 
@@ -183,7 +183,7 @@ class WebSocketService {
         console.log(`Unsubscribed from comments for photo ${photoId}`)
     }
 
-    // Join upload room to receive upload events
+    // 加入上传房间以接收上传事件
     joinUploadRoom(uploadId: string): void {
         if (!this.connected || !this.socket) {
             this.connect().then(() => {
@@ -196,7 +196,7 @@ class WebSocketService {
         console.log(`Joined upload room for upload ${uploadId}`)
     }
 
-    // Leave upload room
+    // 离开上传房间
     leaveUploadRoom(uploadId: string): void {
         if (!this.connected || !this.socket) return
 
@@ -204,65 +204,64 @@ class WebSocketService {
         console.log(`Left upload room for upload ${uploadId}`)
     }
 
-    // Add comment listener for a specific photo
+    // 添加照片评论监听器
     addCommentListener(photoId: string, listener: (event: CommentEvent) => void): void {
         if (!this.commentListeners.has(photoId)) {
             this.commentListeners.set(photoId, [])
         }
-
-        this.commentListeners.get(photoId)?.push(listener)
+        this.commentListeners.get(photoId)!.push(listener)
     }
 
-    // Remove comment listener
-    removeCommentListener(photoId: string, listener: (event: CommentEvent) => void): void {
-        const listeners = this.commentListeners.get(photoId)
-        if (!listeners) return
+    // 移除评论监听器
+    removeCommentListener(photoId: string, listener?: (event: CommentEvent) => void): void {
+        if (!this.commentListeners.has(photoId)) return
 
-        const index = listeners.indexOf(listener)
-        if (index !== -1) {
-            listeners.splice(index, 1)
-        }
-
-        if (listeners.length === 0) {
+        if (!listener) {
             this.commentListeners.delete(photoId)
+            return
+        }
+
+        const listeners = this.commentListeners.get(photoId)
+        if (listeners) {
+            const index = listeners.indexOf(listener)
+            if (index !== -1) {
+                listeners.splice(index, 1)
+            }
         }
     }
 
-    // Add upload progress listener
+    // 添加上传进度监听器
     addUploadProgressListener(uploadId: string, listener: (event: UploadProgressEvent) => void): void {
         if (!this.uploadProgressListeners.has(uploadId)) {
             this.uploadProgressListeners.set(uploadId, [])
         }
-
-        this.uploadProgressListeners.get(uploadId)?.push(listener)
+        this.uploadProgressListeners.get(uploadId)!.push(listener)
     }
 
-    // Add upload completed listener
+    // 添加上传完成监听器
     addUploadCompletedListener(uploadId: string, listener: (event: UploadCompletedEvent) => void): void {
         if (!this.uploadCompletedListeners.has(uploadId)) {
             this.uploadCompletedListeners.set(uploadId, [])
         }
-
-        this.uploadCompletedListeners.get(uploadId)?.push(listener)
+        this.uploadCompletedListeners.get(uploadId)!.push(listener)
     }
 
-    // Add upload status listener
+    // 添加上传状态监听器
     addUploadStatusListener(uploadId: string, listener: (event: UploadStatusEvent) => void): void {
         if (!this.uploadStatusListeners.has(uploadId)) {
             this.uploadStatusListeners.set(uploadId, [])
         }
-
-        this.uploadStatusListeners.get(uploadId)?.push(listener)
+        this.uploadStatusListeners.get(uploadId)!.push(listener)
     }
 
-    // Add connection status listener
+    // 添加连接状态监听器
     addConnectionListener(listener: (connected: boolean) => void): void {
-        this.connectionListeners.push(listener)
-        // Immediately notify with current status
+        // 立即通知当前状态
         listener(this.connected)
+        this.connectionListeners.push(listener)
     }
 
-    // Remove connection listener
+    // 移除连接状态监听器
     removeConnectionListener(listener: (connected: boolean) => void): void {
         const index = this.connectionListeners.indexOf(listener)
         if (index !== -1) {
@@ -270,7 +269,7 @@ class WebSocketService {
         }
     }
 
-    // Send a comment
+    // 发送评论
     sendComment(photoId: string, comment: Omit<PhotoComment, 'id' | 'createdAt'>): void {
         if (!this.connected || !this.socket) {
             this.connect().then(() => {
@@ -279,15 +278,10 @@ class WebSocketService {
             return
         }
 
-        this.socket.emit('send-comment', {
-            photoId,
-            content: comment.content,
-            userId: comment.userId,
-            username: comment.username
-        })
+        this.socket.emit('send-comment', { photoId, comment })
     }
 
-    // Clear all event listeners
+    // 清除所有事件监听器
     private clearAllListeners(): void {
         this.commentListeners.clear()
         this.uploadProgressListeners.clear()
@@ -296,63 +290,71 @@ class WebSocketService {
         this.connectionListeners = []
     }
 
-    // Notify comment listeners for a specific photo
+    // 通知评论监听器
     private notifyCommentListeners(photoId: string, event: CommentEvent): void {
+        if (!this.commentListeners.has(photoId)) return
+
         const listeners = this.commentListeners.get(photoId)
-        if (!listeners) return
-
-        listeners.forEach(listener => {
-            try {
-                listener(event)
-            } catch (error) {
-                console.error('Error in comment listener:', error)
-            }
-        })
+        if (listeners) {
+            listeners.forEach(listener => {
+                try {
+                    listener(event)
+                } catch (error) {
+                    console.error('Error in comment listener:', error)
+                }
+            })
+        }
     }
 
-    // Notify upload progress listeners for a specific upload
+    // 通知上传进度监听器
     private notifyUploadProgressListeners(uploadId: string, event: UploadProgressEvent): void {
+        if (!this.uploadProgressListeners.has(uploadId)) return
+
         const listeners = this.uploadProgressListeners.get(uploadId)
-        if (!listeners) return
-
-        listeners.forEach(listener => {
-            try {
-                listener(event)
-            } catch (error) {
-                console.error('Error in upload progress listener:', error)
-            }
-        })
+        if (listeners) {
+            listeners.forEach(listener => {
+                try {
+                    listener(event)
+                } catch (error) {
+                    console.error('Error in upload progress listener:', error)
+                }
+            })
+        }
     }
 
-    // Notify upload completed listeners for a specific upload
+    // 通知上传完成监听器
     private notifyUploadCompletedListeners(uploadId: string, event: UploadCompletedEvent): void {
+        if (!this.uploadCompletedListeners.has(uploadId)) return
+
         const listeners = this.uploadCompletedListeners.get(uploadId)
-        if (!listeners) return
-
-        listeners.forEach(listener => {
-            try {
-                listener(event)
-            } catch (error) {
-                console.error('Error in upload completed listener:', error)
-            }
-        })
+        if (listeners) {
+            listeners.forEach(listener => {
+                try {
+                    listener(event)
+                } catch (error) {
+                    console.error('Error in upload completed listener:', error)
+                }
+            })
+        }
     }
 
-    // Notify upload status listeners for a specific upload
+    // 通知上传状态监听器
     private notifyUploadStatusListeners(uploadId: string, event: UploadStatusEvent): void {
-        const listeners = this.uploadStatusListeners.get(uploadId)
-        if (!listeners) return
+        if (!this.uploadStatusListeners.has(uploadId)) return
 
-        listeners.forEach(listener => {
-            try {
-                listener(event)
-            } catch (error) {
-                console.error('Error in upload status listener:', error)
-            }
-        })
+        const listeners = this.uploadStatusListeners.get(uploadId)
+        if (listeners) {
+            listeners.forEach(listener => {
+                try {
+                    listener(event)
+                } catch (error) {
+                    console.error('Error in upload status listener:', error)
+                }
+            })
+        }
     }
 
-    // Notify connection listeners
+    // 通知连接状态监听器
     private notifyConnectionListeners(connected: boolean): void {
         this.connectionListeners.forEach(listener => {
             try {
@@ -362,30 +364,29 @@ class WebSocketService {
             }
         })
     }
+
+    private reconnect(): void {
+        this.attemptReconnect()
+    }
 }
 
 export const webSocketService = new WebSocketService()
 
-// Helper functions for easy usage of the WebSocket service
-
+// 辅助函数，便于使用WebSocket服务
 export const onCommentAdded = (photoId: string, callback: (event: CommentEvent) => void): void => {
     webSocketService.addCommentListener(photoId, callback)
-    webSocketService.subscribeToComments(photoId)
 }
 
 export const onUploadProgress = (uploadId: string, callback: (event: UploadProgressEvent) => void): void => {
     webSocketService.addUploadProgressListener(uploadId, callback)
-    webSocketService.joinUploadRoom(uploadId)
 }
 
 export const onUploadCompleted = (uploadId: string, callback: (event: UploadCompletedEvent) => void): void => {
     webSocketService.addUploadCompletedListener(uploadId, callback)
-    webSocketService.joinUploadRoom(uploadId)
 }
 
 export const onUploadStatusUpdated = (uploadId: string, callback: (event: UploadStatusEvent) => void): void => {
     webSocketService.addUploadStatusListener(uploadId, callback)
-    webSocketService.joinUploadRoom(uploadId)
 }
 
 export const onConnectionChange = (callback: (connected: boolean) => void): void => {
@@ -396,12 +397,7 @@ export const joinUploadRoom = (uploadId: string): void => {
     webSocketService.joinUploadRoom(uploadId)
 }
 
-// Initialize websocket connection
-let connectionInitiated = false
-
+// 初始化websocket连接
 export const initWebSocket = (): Promise<boolean> => {
-    if (connectionInitiated) return Promise.resolve(webSocketService.isConnected())
-
-    connectionInitiated = true
     return webSocketService.connect()
 } 

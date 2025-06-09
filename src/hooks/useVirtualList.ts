@@ -1,44 +1,53 @@
 import { ref, computed, onMounted, onBeforeUnmount, Ref, nextTick, watch } from 'vue'
 
+/**
+ * 虚拟列表选项接口
+ * 定义虚拟列表的配置参数
+ */
 export interface VirtualListOptions<T> {
-    // Data list
+    // 数据列表
     list: Ref<T[]>
-    // Item height (px) - can be a fixed number or a function that returns the height for a specific item
+    // 项目高度(像素) - 可以是固定数字或返回特定项目高度的函数
     itemHeight: number | ((item: T, index: number) => number)
-    // Container height (px)
+    // 容器高度(像素)
     containerHeight?: number
-    // Buffer item count (render additional items)
+    // 缓冲项数量(额外渲染的项目数)
     bufferSize?: number
-    // Key extractor function
+    // 键值提取函数
     keyExtractor?: (item: T, index: number) => string | number
-    // Whether to dynamically adjust the item heights
+    // 是否动态调整项目高度
     dynamicItemHeight?: boolean
 }
 
+/**
+ * 虚拟列表状态接口
+ * 定义虚拟列表的返回值
+ */
 export interface VirtualListState<T> {
-    // Container element ref
+    // 容器元素引用
     containerRef: Ref<HTMLElement | null>
-    // Visible items
+    // 可见项目
     visibleItems: Ref<T[]>
-    // Visible item indices
+    // 可见项目索引范围
     visibleIndices: Ref<{ start: number; end: number }>
-    // Total list height
+    // 列表总高度
     totalHeight: Ref<number>
-    // Offset for visible items
+    // 可见项目的偏移量
     offsetY: Ref<number>
-    // Handle scroll event
+    // 处理滚动事件
     onScroll: (e: Event) => void
-    // Check if item is visible
+    // 检查项目是否可见
     isItemVisible: (index: number) => boolean
-    // Scroll to specific item
+    // 滚动到特定项目
     scrollToItem: (index: number, behavior?: ScrollBehavior) => void
-    // Refresh list calculations
+    // 刷新列表计算
     refreshList: () => void
 }
 
 /**
- * Virtual list hook
- * @param options Virtual list options
+ * 虚拟列表钩子函数
+ * 实现虚拟滚动，只渲染可视区域内的项目，大幅提高长列表性能
+ * @param options 虚拟列表选项
  */
 export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListState<T> {
     const {
@@ -50,12 +59,20 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         dynamicItemHeight = false
     } = options
 
+    // 容器引用和滚动状态
     const containerRef = ref<HTMLElement | null>(null)
     const scrollTop = ref(0)
+    // 存储每个项目的实际高度
     const itemHeights = ref<Map<number, number>>(new Map())
+    // 存储每个项目的位置信息(顶部和底部坐标)
     const itemPositions = ref<{ top: number; bottom: number }[]>([])
 
-    // Get item height for an item
+    /**
+     * 获取项目高度
+     * 根据配置选择固定高度或动态计算高度
+     * @param item 项目数据
+     * @param index 项目索引
+     */
     const getItemHeight = (item: T, index: number): number => {
         if (typeof rawItemHeight === 'function') {
             return rawItemHeight(item, index)
@@ -68,7 +85,10 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         return rawItemHeight as number
     }
 
-    // Calculate item positions
+    /**
+     * 计算项目位置
+     * 为每个项目计算其在列表中的顶部和底部位置
+     */
     const calculateItemPositions = () => {
         const positions: { top: number; bottom: number }[] = []
         let top = 0
@@ -83,12 +103,15 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         itemPositions.value = positions
     }
 
-    // Recalculate when list changes
+    // 列表数据变化时重新计算位置
     watch(() => list.value.length, () => {
         calculateItemPositions()
     })
 
-    // Calculate visible item range
+    /**
+     * 计算可见项目范围
+     * 根据当前滚动位置确定应该渲染哪些项目
+     */
     const visibleRange = computed(() => {
         if (!containerRef.value) {
             return { start: 0, end: 10 }
@@ -99,24 +122,28 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         let end = list.value.length - 1
 
         if (dynamicItemHeight && itemPositions.value.length > 0) {
-            // Binary search for start index with dynamic heights
+            // 使用二分查找确定起始索引(动态高度)
             start = binarySearchForStart(scrollTop.value)
             end = binarySearchForEnd(scrollTop.value + currentHeight)
         } else {
-            // Simple calculation for fixed heights
+            // 简单计算固定高度
             const avgItemHeight = typeof rawItemHeight === 'number' ? rawItemHeight : 50
             start = Math.floor(scrollTop.value / avgItemHeight) - bufferSize
             end = Math.ceil((scrollTop.value + currentHeight) / avgItemHeight) + bufferSize
         }
 
-        // Apply buffer and clamp values
+        // 应用缓冲区并限制值范围
         start = Math.max(0, start - bufferSize)
         end = Math.min(list.value.length, end + bufferSize)
 
         return { start, end }
     })
 
-    // Binary search to find start index
+    /**
+     * 二分查找起始索引
+     * 快速定位滚动位置对应的列表项索引
+     * @param scrollTop 滚动顶部位置
+     */
     const binarySearchForStart = (scrollTop: number): number => {
         const positions = itemPositions.value
         if (positions.length === 0) return 0
@@ -140,7 +167,11 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         return low > 0 ? low - 1 : 0
     }
 
-    // Binary search to find end index
+    /**
+     * 二分查找结束索引
+     * 快速定位滚动底部位置对应的列表项索引
+     * @param scrollBottom 滚动底部位置
+     */
     const binarySearchForEnd = (scrollBottom: number): number => {
         const positions = itemPositions.value
         if (positions.length === 0) return 0
@@ -164,13 +195,16 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         return Math.min(low, positions.length - 1)
     }
 
-    // Get visible items
+    // 获取可见项目
     const visibleItems = computed(() => {
         const { start, end } = visibleRange.value
         return list.value.slice(start, end)
     })
 
-    // Calculate total height
+    /**
+     * 计算列表总高度
+     * 用于设置容器内部包装器的高度，确保滚动条正确显示
+     */
     const totalHeight = computed(() => {
         if (dynamicItemHeight && itemPositions.value.length > 0) {
             const lastItem = itemPositions.value[itemPositions.value.length - 1]
@@ -182,7 +216,10 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         }, 0)
     })
 
-    // Calculate offset for visible items
+    /**
+     * 计算可见项目的偏移量
+     * 确定可见项目在列表中的正确位置
+     */
     const offsetY = computed(() => {
         const { start } = visibleRange.value
 
@@ -202,7 +239,10 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         return offset
     })
 
-    // Update item heights after rendering
+    /**
+     * 更新项目高度
+     * 在渲染后测量实际DOM高度，更新动态高度配置
+     */
     const updateItemHeights = async () => {
         if (!dynamicItemHeight || !containerRef.value) return
 
@@ -227,7 +267,10 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         }
     }
 
-    // Handle scroll
+    /**
+     * 处理滚动事件
+     * 更新滚动位置并触发动态高度更新
+     */
     const onScroll = (e: Event) => {
         if (e.target) {
             scrollTop.value = (e.target as HTMLElement).scrollTop
@@ -239,13 +282,21 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         }
     }
 
-    // Check if item is visible
+    /**
+     * 检查项目是否可见
+     * 判断指定索引的项目是否在可视范围内
+     */
     const isItemVisible = (index: number): boolean => {
         const { start, end } = visibleRange.value
         return index >= start && index < end
     }
 
-    // Scroll to specific item
+    /**
+     * 滚动到特定项目
+     * 将视图移动到指定项目的位置
+     * @param index 目标项目索引
+     * @param behavior 滚动行为(平滑或即时)
+     */
     const scrollToItem = (index: number, behavior: ScrollBehavior = 'auto') => {
         if (!containerRef.value || index < 0 || index >= list.value.length) return
 
@@ -265,14 +316,20 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
         })
     }
 
-    // Refresh list calculations
+    /**
+     * 刷新列表计算
+     * 重置所有高度缓存并重新计算位置
+     */
     const refreshList = async () => {
         itemHeights.value = new Map()
         await nextTick()
         calculateItemPositions()
     }
 
-    // Add resize observer
+    /**
+     * 设置调整大小观察器
+     * 监听容器大小变化，自动重新计算列表
+     */
     const setupResizeObserver = () => {
         if (window.ResizeObserver && containerRef.value) {
             const resizeObserver = new ResizeObserver(() => {
@@ -285,24 +342,28 @@ export function useVirtualList<T>(options: VirtualListOptions<T>): VirtualListSt
 
             resizeObserver.observe(containerRef.value)
 
-            // Clean up observer
+            // 清理观察器
             onBeforeUnmount(() => {
                 resizeObserver.disconnect()
             })
         }
     }
 
-    // Add scroll event listener
+    /**
+     * 添加滚动事件监听器
+     */
     const addScrollListener = () => {
         containerRef.value?.addEventListener('scroll', onScroll, { passive: true })
     }
 
-    // Remove scroll event listener
+    /**
+     * 移除滚动事件监听器
+     */
     const removeScrollListener = () => {
         containerRef.value?.removeEventListener('scroll', onScroll)
     }
 
-    // Set up and clean up
+    // 设置和清理
     onMounted(() => {
         addScrollListener()
         calculateItemPositions()

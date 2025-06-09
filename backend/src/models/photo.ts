@@ -40,7 +40,7 @@ export interface PhotoCreate {
 
 export class PhotoModel {
     /**
-     * Create a new photo
+     * 创建新照片
      */
     static async create(photoData: PhotoCreate): Promise<Photo> {
         const id = uuidv4();
@@ -80,7 +80,7 @@ export class PhotoModel {
     }
 
     /**
-     * Find photo by ID
+     * 通过ID查找照片
      */
     static async findById(id: string): Promise<Photo | null> {
         const [rows] = await pool.execute(
@@ -93,7 +93,7 @@ export class PhotoModel {
     }
 
     /**
-     * Find photo by ID with user info
+     * 通过ID查找照片，并包含用户信息
      */
     static async findByIdWithUser(id: string): Promise<PhotoWithUser | null> {
         const [rows] = await pool.execute(
@@ -109,7 +109,7 @@ export class PhotoModel {
     }
 
     /**
-     * Find photos by user ID
+     * 通过用户ID查找照片
      */
     static async findByUserId(userId: string, limit: number = 20, offset: number = 0): Promise<Photo[]> {
         // 确保limit和offset是安全的数字
@@ -125,7 +125,7 @@ export class PhotoModel {
     }
 
     /**
-     * Count photos by user ID
+     * 统计用户的照片数量
      */
     static async countByUserId(userId: string): Promise<number> {
         const [rows] = await pool.execute(
@@ -137,7 +137,7 @@ export class PhotoModel {
     }
 
     /**
-     * Find photos shared with user
+     * 查找与用户共享的照片
      */
     static async findSharedWithUser(userId: string, limit: number = 20, offset: number = 0): Promise<PhotoWithUser[]> {
         // 确保limit和offset是安全的数字
@@ -159,7 +159,7 @@ export class PhotoModel {
     }
 
     /**
-     * Count photos shared with user
+     * 统计与用户共享的照片数量
      */
     static async countSharedWithUser(userId: string): Promise<number> {
         const [rows] = await pool.execute(
@@ -173,13 +173,13 @@ export class PhotoModel {
     }
 
     /**
-     * Update photo
+     * 更新照片信息
      */
     static async update(id: string, photoData: Partial<Photo>): Promise<Photo | null> {
-        // Remove immutable fields
+        // 移除不可变字段
         const { id: _, user_id, filename, original_filename, file_size, file_type, file_hash, ...updateData } = photoData;
 
-        // Build update query
+        // 构建更新查询
         const entries = Object.entries(updateData).filter(([_, value]) => value !== undefined);
         if (entries.length === 0) {
             return this.findById(id);
@@ -188,18 +188,18 @@ export class PhotoModel {
         const fields = entries.map(([key, _]) => `${key} = ?`).join(', ');
         const values = entries.map(([_, value]) => value);
 
-        // Update photo
+        // 更新照片
         await pool.execute(
             `UPDATE photos SET ${fields} WHERE id = ?`,
             [...values, id]
         );
 
-        // Return updated photo
+        // 返回更新后的照片
         return this.findById(id);
     }
 
     /**
-     * Delete photo
+     * 删除照片
      */
     static async delete(id: string): Promise<boolean> {
         const [result] = await pool.execute(
@@ -211,7 +211,7 @@ export class PhotoModel {
     }
 
     /**
-     * Check if user owns photo
+     * 检查用户是否为照片所有者
      */
     static async isOwner(photoId: string, userId: string): Promise<boolean> {
         const [rows] = await pool.execute(
@@ -223,7 +223,7 @@ export class PhotoModel {
     }
 
     /**
-     * Check if photo is shared with user
+     * 检查照片是否与用户共享
      */
     static async isSharedWithUser(photoId: string, userId: string): Promise<boolean> {
         const [rows] = await pool.execute(
@@ -235,17 +235,17 @@ export class PhotoModel {
     }
 
     /**
-     * Share photo with user
+     * 与用户共享照片
      */
     static async shareWithUser(photoId: string, sharedBy: string, sharedWith: string): Promise<boolean> {
-        // Check if already shared
+        // 检查是否已共享
         const [existingShares] = await pool.execute(
             'SELECT id FROM photo_shares WHERE photo_id = ? AND shared_with = ?',
             [photoId, sharedWith]
         );
 
         if ((existingShares as any[]).length > 0) {
-            return true; // Already shared
+            return true; // 已经共享
         }
 
         // Share photo

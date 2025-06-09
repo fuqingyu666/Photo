@@ -5,7 +5,7 @@ import env from '../config/env';
 import pool from '../config/database';
 
 /**
- * Get all photos for the current user
+ * 获取当前用户的所有照片
  */
 export const getUserPhotos = async (req: Request, res: Response) => {
     try {
@@ -13,16 +13,16 @@ export const getUserPhotos = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Not authenticated' });
         }
 
-        // Pagination
+        // 分页
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 20;
         const offset = (page - 1) * limit;
 
-        // Get photos
+        // 获取照片
         const photos = await PhotoModel.findByUserId(req.user.id, limit, offset);
         const total = await PhotoModel.countByUserId(req.user.id);
 
-        // Add photo URLs
+        // 添加照片URL
         const photosWithUrls = photos.map(photo => ({
             ...photo,
             url: `${req.protocol}://${req.get('host')}/uploads/${photo.filename}`
@@ -44,7 +44,7 @@ export const getUserPhotos = async (req: Request, res: Response) => {
 };
 
 /**
- * Get shared photos for the current user
+ * 获取与当前用户共享的照片
  */
 export const getSharedPhotos = async (req: Request, res: Response) => {
     try {
@@ -52,7 +52,7 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Not authenticated' });
         }
 
-        // Pagination
+        // 分页
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 20;
         const offset = (page - 1) * limit;
@@ -61,8 +61,8 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
         const safeLimit = Math.min(Math.max(1, limit), 100);
         const safeOffset = Math.max(0, offset);
 
-        // Get all publicly shared photos that are not private
-        // Modified to get ALL shared photos, not just those directly shared with this user
+        // 获取所有公开共享且非私有的照片
+        // 修改为获取所有共享照片，而不仅仅是直接与此用户共享的照片
         const [rows] = await pool.execute(
             `SELECT p.*, u.username 
              FROM photos p
@@ -75,7 +75,7 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
 
         const photos = rows as any[];
 
-        // Count total shared photos
+        // 计算共享照片总数
         const [countRows] = await pool.execute(
             `SELECT COUNT(*) as count 
              FROM photos 
@@ -84,7 +84,7 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
 
         const total = (countRows as any[])[0].count;
 
-        // Add photo URLs
+        // 添加照片URL
         const photosWithUrls = photos.map(photo => ({
             ...photo,
             url: `${req.protocol}://${req.get('host')}/uploads/${photo.filename}`
@@ -106,7 +106,7 @@ export const getSharedPhotos = async (req: Request, res: Response) => {
 };
 
 /**
- * Get a single photo by ID
+ * 通过ID获取单张照片
  */
 export const getPhotoById = async (req: Request, res: Response) => {
     try {
@@ -116,13 +116,13 @@ export const getPhotoById = async (req: Request, res: Response) => {
 
         const photoId = req.params.id;
 
-        // Get photo with user info
+        // 获取带有用户信息的照片
         const photo = await PhotoModel.findByIdWithUser(photoId);
         if (!photo) {
             return res.status(404).json({ error: 'Photo not found' });
         }
 
-        // Check if user has access to this photo
+        // 检查用户是否有权访问此照片
         const isOwner = photo.user_id === req.user.id;
         const isSharedWithUser = await PhotoModel.isSharedWithUser(photoId, req.user.id);
         const isPubliclyShared = photo.is_shared && !photo.is_private;
@@ -131,19 +131,19 @@ export const getPhotoById = async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'You do not have permission to view this photo' });
         }
 
-        // Add photo URL
+        // 添加照片URL
         const photoWithUrl = {
             ...photo,
             url: `${req.protocol}://${req.get('host')}/uploads/${photo.filename}`
         };
 
-        // Get AI analysis if available
+        // 获取AI分析结果（如果有）
         let analysis = null;
         try {
             analysis = await AIModel.findByPhotoId(photoId);
         } catch (analysisError) {
             console.error('Error retrieving AI analysis:', analysisError);
-            // Continue without AI analysis
+            // 继续执行，不带AI分析
         }
 
         res.json({
@@ -157,7 +157,7 @@ export const getPhotoById = async (req: Request, res: Response) => {
 };
 
 /**
- * Create a new photo entry after upload is complete
+ * 上传完成后创建新的照片条目
  */
 export const createPhoto = async (req: Request, res: Response) => {
     try {
@@ -167,12 +167,12 @@ export const createPhoto = async (req: Request, res: Response) => {
 
         const { title, description, filename, original_filename, file_size, file_type, file_hash } = req.body;
 
-        // Validate required fields
+        // 验证必填字段
         if (!title || !filename || !original_filename || !file_size || !file_type || !file_hash) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Create photo
+        // 创建照片
         const photo = await PhotoModel.create({
             user_id: req.user.id,
             title,
@@ -184,13 +184,13 @@ export const createPhoto = async (req: Request, res: Response) => {
             file_hash
         });
 
-        // Add photo URL
+        // 添加照片URL
         const photoWithUrl = {
             ...photo,
             url: `${req.protocol}://${req.get('host')}/uploads/${photo.filename}`
         };
 
-        // Trigger AI analysis in background
+        // 在后台触发AI分析
         const photoUrl = `${req.protocol}://${req.get('host')}/uploads/${photo.filename}`;
         AIModel.analyzePhoto(photo.id, photoUrl).catch(err => {
             console.error('Error analyzing photo:', err);
@@ -204,7 +204,7 @@ export const createPhoto = async (req: Request, res: Response) => {
 };
 
 /**
- * Update a photo
+ * 更新照片
  */
 export const updatePhoto = async (req: Request, res: Response) => {
     try {
@@ -215,19 +215,19 @@ export const updatePhoto = async (req: Request, res: Response) => {
         const photoId = req.params.id;
         const { title, description } = req.body;
 
-        // Check if user owns photo
+        // 检查用户是否拥有照片
         const isOwner = await PhotoModel.isOwner(photoId, req.user.id);
         if (!isOwner) {
             return res.status(403).json({ error: 'You do not have permission to update this photo' });
         }
 
-        // Update photo
+        // 更新照片
         const updatedPhoto = await PhotoModel.update(photoId, { title, description });
         if (!updatedPhoto) {
             return res.status(404).json({ error: 'Photo not found' });
         }
 
-        // Add photo URL
+        // 添加照片URL
         const photoWithUrl = {
             ...updatedPhoto,
             url: `${req.protocol}://${req.get('host')}/uploads/${updatedPhoto.filename}`
@@ -241,7 +241,7 @@ export const updatePhoto = async (req: Request, res: Response) => {
 };
 
 /**
- * Delete a photo
+ * 删除照片
  */
 export const deletePhoto = async (req: Request, res: Response) => {
     try {

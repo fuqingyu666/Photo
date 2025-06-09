@@ -4,16 +4,16 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// All routes require authentication
+// 所有路由都需要认证
 router.use(authenticate as RequestHandler);
 
-// Get comments for a photo
+// 获取照片的评论
 router.get('/photo/:photoId', commentController.getComments as RequestHandler);
 
-// Create a new comment
+// 创建新评论
 router.post('/photo/:photoId', commentController.createComment as RequestHandler);
 
-// Delete a comment
+// 删除评论
 router.delete('/photo/:photoId/comment/:commentId', commentController.deleteComment as RequestHandler);
 
 export default router; 

@@ -2,10 +2,10 @@ import SparkMD5 from 'spark-md5'
 import axios from 'axios'
 import { v4 as uuidv4 } from 'uuid'
 
-// Default chunk size: 2MB (can be adjusted based on network conditions)
+// 默认分块大小：2MB（可根据网络条件调整）
 const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_RETRY_ATTEMPTS = 3
-const RETRY_DELAY = 1000 // ms
+const RETRY_DELAY = 1000 // 毫秒
 
 export interface FileChunk {
     chunk: Blob
@@ -35,10 +35,10 @@ export interface UploadTask {
 }
 
 /**
- * Adaptive chunk size based on network conditions and file size
+ * 根据网络条件和文件大小自适应调整分块大小
  */
 export const getAdaptiveChunkSize = (fileSize: number): number => {
-    // For very large files, use larger chunks
+    // 对于非常大的文件，使用更大的分块
     if (fileSize > 1024 * 1024 * 1024) { // > 1GB
         return 5 * 1024 * 1024; // 5MB
     } else if (fileSize > 100 * 1024 * 1024) { // > 100MB
@@ -49,13 +49,13 @@ export const getAdaptiveChunkSize = (fileSize: number): number => {
 }
 
 /**
- * Calculate file hash using SparkMD5
+ * 使用SparkMD5计算文件哈希值
  */
 export const calculateFileHash = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
     return new Promise((resolve, reject) => {
         const fileReader = new FileReader()
         const spark = new SparkMD5.ArrayBuffer()
-        const chunkSize = Math.min(2 * 1024 * 1024, file.size / 10) // Use smaller chunks for hashing
+        const chunkSize = Math.min(2 * 1024 * 1024, file.size / 10) // 计算哈希值时使用较小的分块
         const chunks = Math.ceil(file.size / chunkSize)
         let currentChunk = 0
 
@@ -93,16 +93,16 @@ export const calculateFileHash = (file: File, onProgress?: (progress: number) =>
 }
 
 /**
- * Create file chunks for upload
+ * 为上传创建文件分块
  */
 export const createFileChunks = async (
     file: File,
     hashProgress?: (progress: number) => void
 ): Promise<{ chunks: FileChunk[], fileHash: string }> => {
-    // Calculate file hash for verification
+    // 计算文件哈希值用于验证
     const fileHash = await calculateFileHash(file, hashProgress)
 
-    // Determine optimal chunk size based on file size
+    // 根据文件大小确定最佳分块大小
     const chunkSize = getAdaptiveChunkSize(file.size)
     const chunks: FileChunk[] = []
     const chunkCount = Math.ceil(file.size / chunkSize)
@@ -112,7 +112,7 @@ export const createFileChunks = async (
         const end = start + chunkSize >= file.size ? file.size : start + chunkSize
         const chunk = file.slice(start, end)
 
-        // Calculate chunk hash for verification
+        // 计算分块哈希值用于验证
         const chunkHash = await calculateChunkHash(chunk)
 
         chunks.push({
@@ -130,7 +130,7 @@ export const createFileChunks = async (
 }
 
 /**
- * Calculate chunk hash
+ * 计算分块哈希值
  */
 export const calculateChunkHash = (chunk: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -149,13 +149,13 @@ export const calculateChunkHash = (chunk: Blob): Promise<string> => {
 }
 
 /**
- * Create upload task
+ * 创建上传任务
  */
 export const createUploadTask = async (file: File, onHashProgress?: (progress: number) => void): Promise<UploadTask> => {
     try {
         console.log('Creating upload task for file:', file.name)
 
-        // Show hash calculation progress
+        // 显示哈希计算进度
         const { chunks, fileHash } = await createFileChunks(file, onHashProgress)
 
         const task: UploadTask = {
@@ -171,7 +171,7 @@ export const createUploadTask = async (file: File, onHashProgress?: (progress: n
             createTime: new Date()
         }
 
-        // Try to initialize upload on server
+        // 尝试在服务器上初始化上传
         try {
             const response = await axios.post('/api/upload/init', {
                 original_filename: file.name,
@@ -185,7 +185,7 @@ export const createUploadTask = async (file: File, onHashProgress?: (progress: n
                 task.uploadId = response.data.upload.id
                 task.uploadedChunks = response.data.upload.chunks_uploaded
 
-                // Update chunk status for already uploaded chunks
+                // 更新已上传分块的状态
                 for (let i = 0; i < task.uploadedChunks; i++) {
                     if (task.chunks[i]) {
                         task.chunks[i].status = 'complete'
@@ -193,12 +193,12 @@ export const createUploadTask = async (file: File, onHashProgress?: (progress: n
                     }
                 }
 
-                // Calculate overall progress
+                // 计算总体进度
                 task.progress = (task.uploadedChunks / task.chunks.length) * 100
             }
         } catch (error) {
             console.error('Error initializing upload on server:', error)
-            // We'll continue with local task anyway and retry server init on upload start
+            // 我们仍将继续使用本地任务，并在上传开始时重试服务器初始化
         }
 
         return task
@@ -209,7 +209,7 @@ export const createUploadTask = async (file: File, onHashProgress?: (progress: n
 }
 
 /**
- * Upload a single chunk
+ * 上传单个分块
  */
 export const uploadChunk = async (chunk: FileChunk, task: UploadTask): Promise<boolean> => {
     if (!task.uploadId) {
@@ -223,18 +223,18 @@ export const uploadChunk = async (chunk: FileChunk, task: UploadTask): Promise<b
     try {
         chunk.status = 'uploading'
 
-        // Create abort controller for this request
+        // 为此请求创建中止控制器
         const abortController = new AbortController()
         task.abortController = abortController
 
-        // Create form data
+        // 创建表单数据
         const formData = new FormData()
         formData.append('upload_id', task.uploadId)
         formData.append('chunk_index', chunk.index.toString())
         formData.append('chunk_hash', chunk.hash)
         formData.append('chunk', chunk.chunk)
 
-        // Upload chunk with progress tracking
+        // 上传分块并跟踪进度
         const response = await axios.post('/api/upload/chunk', formData, {
             signal: abortController.signal,
             headers: {

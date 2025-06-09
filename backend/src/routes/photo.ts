@@ -4,20 +4,20 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// All routes require authentication
+// 所有路由都需要认证
 router.use(authenticate as RequestHandler);
 
-// Get photos
+// 获取照片
 router.get('/', photoController.getUserPhotos as RequestHandler);
 router.get('/shared', photoController.getSharedPhotos as RequestHandler);
 router.get('/:id', photoController.getPhotoById as RequestHandler);
 
-// Manage photos
+// 管理照片
 router.post('/', photoController.createPhoto as RequestHandler);
 router.put('/:id', photoController.updatePhoto as RequestHandler);
 router.delete('/:id', photoController.deletePhoto as RequestHandler);
 
-// Share photos
+// 共享照片
 router.post('/:id/share', photoController.sharePhoto as RequestHandler);
 router.delete('/:id/share', photoController.unsharePhoto as RequestHandler);
 

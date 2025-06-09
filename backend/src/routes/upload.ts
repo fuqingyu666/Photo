@@ -4,29 +4,29 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// All routes require authentication
+// 所有路由都需要身份验证
 router.use(authenticate as RequestHandler);
 
-// Initialize upload
+// 初始化上传
 router.post('/init', uploadController.uploadMiddleware as RequestHandler, uploadController.initUpload as RequestHandler);
 
-// Upload chunk with multer middleware
+// 使用 multer 中间件上传分块
 router.post('/chunk', uploadController.uploadMiddleware as RequestHandler, uploadController.uploadChunk as RequestHandler);
 router.post('/chunk/:id', uploadController.uploadMiddleware as RequestHandler, uploadController.uploadChunk as RequestHandler);
 
-// Complete upload
+// 完成上传
 router.post('/complete', uploadController.completeUpload as RequestHandler);
 
-// Get upload status
+// 获取上传状态
 router.get('/:id', uploadController.getUploadStatus as RequestHandler);
 
-// Update upload status (pause/resume)
+// 更新上传状态（暂停/恢复）
 router.put('/:id/status', uploadController.updateUploadStatus as RequestHandler);
 
-// Delete upload
+// 删除上传
 router.delete('/:id', uploadController.deleteUpload as RequestHandler);
 
-// Get user uploads
+// 获取用户上传列表
 router.get('/', uploadController.getUserUploads as RequestHandler);
 
 export default router; 

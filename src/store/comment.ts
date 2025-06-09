@@ -5,17 +5,17 @@ import { useSocketStore } from './socket';
 import { useAuthStore } from './auth';
 
 export const useCommentStore = defineStore('comment', () => {
-    // State
+    // 状态
     const comments = ref<Comment[]>([]);
     const loading = ref<boolean>(false);
     const error = ref<string | null>(null);
     const currentPhotoId = ref<string | null>(null);
 
-    // Socket connection
+    // Socket连接
     const socketStore = useSocketStore();
     const authStore = useAuthStore();
 
-    // Load persisted guest comments on initialization
+    // 初始化时加载已保存的游客评论
     const loadPersistedComments = (photoId: string) => {
         const persistedComments = localStorage.getItem(`guest_comments_${photoId}`);
         if (persistedComments) {

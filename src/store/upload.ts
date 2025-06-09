@@ -5,15 +5,15 @@ import { FileUpload, UploadProgress } from '../api/upload'
 import { joinUploadRoom, onUploadProgress, onUploadCompleted, onUploadStatusUpdated } from '../utils/socket'
 
 export const useUploadStore = defineStore('upload', () => {
-    // State
+    // 状态
     const uploads = ref<FileUpload[]>([])
     const currentUpload = ref<FileUpload | null>(null)
     const loading = ref(false)
     const error = ref('')
     const progress = ref<UploadProgress | null>(null)
-    const activeUploads = ref<string[]>([]) // Track active upload IDs
+    const activeUploads = ref<string[]>([]) // 跟踪活跃上传的ID
 
-    // Getters
+    // 获取器
     const isUploading = computed(() => activeUploads.value.length > 0)
 
     const pendingUploads = computed(() =>
@@ -24,17 +24,17 @@ export const useUploadStore = defineStore('upload', () => {
         uploads.value.filter(u => u.status === 'completed')
     )
 
-    // Actions
-    // Initialize a new upload
+    // 操作
+    // 初始化新上传
     const initUpload = async (file: File): Promise<FileUpload | null> => {
         loading.value = true
         error.value = ''
 
         try {
-            // Create file chunks and calculate hash
+            // 创建文件块并计算哈希
             const { chunks, fileHash } = await uploadApi.createFileChunks(file)
 
-            // Initialize upload
+            // 初始化上传
             const uploadData = {
                 original_filename: file.name,
                 file_size: file.size,
@@ -45,113 +45,113 @@ export const useUploadStore = defineStore('upload', () => {
 
             const upload = await uploadApi.initUpload(uploadData)
 
-            // Add to uploads list
+            // 添加到上传列表
             uploads.value = [upload, ...uploads.value]
             currentUpload.value = upload
 
-            // Join socket room for this upload
+            // 加入此上传的socket房间
             joinUploadRoom(upload.id)
 
-            // Set up socket listeners
+            // 设置socket监听器
             setupSocketListeners(upload.id)
 
             return upload
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to initialize upload'
+            error.value = err.response?.data?.error || '初始化上传失败'
             return null
         } finally {
             loading.value = false
         }
     }
 
-    // Upload file chunks
+    // 上传文件块
     const uploadChunks = async (file: File, uploadId: string): Promise<boolean> => {
         loading.value = true
         error.value = ''
 
         try {
-            // Add to active uploads
+            // 添加到活跃上传
             if (!activeUploads.value.includes(uploadId)) {
                 activeUploads.value.push(uploadId)
             }
 
-            // Get upload
+            // 获取上传
             const upload = uploads.value.find(u => u.id === uploadId)
             if (!upload) {
-                throw new Error('Upload not found')
+                throw new Error('未找到上传')
             }
 
-            // Create file chunks
+            // 创建文件块
             const { chunks } = await uploadApi.createFileChunks(file)
 
-            // Upload chunks
+            // 上传文件块
             for (let i = 0; i < chunks.length; i++) {
-                // Skip already uploaded chunks
+                // 跳过已上传的块
                 if (i < upload.chunks_uploaded) {
                     continue
                 }
 
-                // Upload chunk
+                // 上传块
                 const result = await uploadApi.uploadChunk(uploadId, i, chunks[i])
 
-                // Update progress
+                // 更新进度
                 progress.value = result.progress
 
-                // Update upload in list
+                // 更新列表中的上传
                 const index = uploads.value.findIndex(u => u.id === uploadId)
                 if (index !== -1) {
                     uploads.value[index].chunks_uploaded = result.progress.uploadedChunks
                     uploads.value[index].status = 'uploading'
                 }
 
-                // Update current upload
+                // 更新当前上传
                 if (currentUpload.value && currentUpload.value.id === uploadId) {
                     currentUpload.value.chunks_uploaded = result.progress.uploadedChunks
                     currentUpload.value.status = 'uploading'
                 }
 
-                // Check if user paused the upload
+                // 检查用户是否暂停上传
                 const updatedUpload = uploads.value.find(u => u.id === uploadId)
                 if (updatedUpload && updatedUpload.status === 'paused') {
-                    // Remove from active uploads
+                    // 从活跃上传中移除
                     activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
                     return false
                 }
             }
 
-            // Complete upload
+            // 完成上传
             await uploadApi.completeUpload(uploadId)
 
-            // Update upload status
+            // 更新上传状态
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index].status = 'completed'
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value.status = 'completed'
             }
 
-            // Remove from active uploads
+            // 从活跃上传中移除
             activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
 
             return true
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to upload file'
+            error.value = err.response?.data?.error || '上传文件失败'
 
-            // Update upload status
+            // 更新上传状态
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index].status = 'error'
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value.status = 'error'
             }
 
-            // Remove from active uploads
+            // 从活跃上传中移除
             activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
 
             return false
@@ -160,7 +160,7 @@ export const useUploadStore = defineStore('upload', () => {
         }
     }
 
-    // Get upload status
+    // 获取上传状态
     const getUploadStatus = async (uploadId: string): Promise<UploadProgress | null> => {
         loading.value = true
         error.value = ''
@@ -168,13 +168,13 @@ export const useUploadStore = defineStore('upload', () => {
         try {
             const result = await uploadApi.getUploadStatus(uploadId)
 
-            // Update upload in list
+            // 更新列表中的上传
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index] = result.upload
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value = result.upload
             }
@@ -182,14 +182,14 @@ export const useUploadStore = defineStore('upload', () => {
             progress.value = result.progress
             return result.progress
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to get upload status'
+            error.value = err.response?.data?.error || '获取上传状态失败'
             return null
         } finally {
             loading.value = false
         }
     }
 
-    // Update upload status (pause/resume)
+    // 更新上传状态（暂停/恢复）
     const updateUploadStatus = async (uploadId: string, status: FileUpload['status']): Promise<boolean> => {
         loading.value = true
         error.value = ''
@@ -197,18 +197,18 @@ export const useUploadStore = defineStore('upload', () => {
         try {
             const result = await uploadApi.updateUploadStatus(uploadId, status)
 
-            // Update upload in list
+            // 更新列表中的上传
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index] = result.upload
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value = result.upload
             }
 
-            // Update active uploads
+            // 更新活跃上传
             if (status === 'paused' || status === 'error' || status === 'completed') {
                 activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
             } else if (status === 'uploading' && !activeUploads.value.includes(uploadId)) {
@@ -217,14 +217,14 @@ export const useUploadStore = defineStore('upload', () => {
 
             return true
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to update upload status'
+            error.value = err.response?.data?.error || '更新上传状态失败'
             return false
         } finally {
             loading.value = false
         }
     }
 
-    // Delete upload
+    // 删除上传
     const deleteUpload = async (uploadId: string): Promise<boolean> => {
         loading.value = true
         error.value = ''
@@ -232,97 +232,109 @@ export const useUploadStore = defineStore('upload', () => {
         try {
             await uploadApi.deleteUpload(uploadId)
 
-            // Remove from uploads list
+            // 从上传列表中移除
             uploads.value = uploads.value.filter(u => u.id !== uploadId)
 
-            // Clear current upload if it's the same
+            // 如果是当前上传则清除
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value = null
             }
 
-            // Remove from active uploads
+            // 从活跃上传中移除
             activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
 
             return true
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to delete upload'
+            error.value = err.response?.data?.error || '删除上传失败'
             return false
         } finally {
             loading.value = false
         }
     }
 
-    // Get user uploads
+    // 获取用户上传
     const getUserUploads = async (): Promise<FileUpload[]> => {
         loading.value = true
         error.value = ''
 
         try {
             const result = await uploadApi.getUserUploads()
-            uploads.value = result.uploads
-            return result.uploads
+            uploads.value = result
+            return result
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to get uploads'
+            error.value = err.response?.data?.error || '获取上传列表失败'
             return []
         } finally {
             loading.value = false
         }
     }
 
-    // Set up socket listeners for an upload
+    // 设置socket监听器
     const setupSocketListeners = (uploadId: string) => {
-        // Listen for upload progress
-        onUploadProgress(uploadId, (data) => {
-            // Update progress
+        // 监听上传进度
+        onUploadProgress((data) => {
+            if (data.upload_id !== uploadId) return
+
+            // 更新进度
             progress.value = {
-                uploadedChunks: data.uploadedChunks,
-                totalChunks: data.totalChunks,
-                progress: data.progress
+                uploadedChunks: data.uploaded_chunks,
+                totalChunks: data.total_chunks,
+                uploadedSize: data.uploaded_size,
+                totalSize: data.total_size,
+                percent: data.percent
             }
 
-            // Update upload in list
+            // 更新列表中的上传
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
-                uploads.value[index].chunks_uploaded = data.uploadedChunks
+                uploads.value[index].chunks_uploaded = data.uploaded_chunks
+                uploads.value[index].status = 'uploading'
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
-                currentUpload.value.chunks_uploaded = data.uploadedChunks
+                currentUpload.value.chunks_uploaded = data.uploaded_chunks
+                currentUpload.value.status = 'uploading'
             }
         })
 
-        // Listen for upload completed
-        onUploadCompleted(uploadId, () => {
-            // Update upload status
+        // 监听上传完成
+        onUploadCompleted((data) => {
+            if (data.upload_id !== uploadId) return
+
+            // 更新列表中的上传
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index].status = 'completed'
+                uploads.value[index].filename = data.filename
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value.status = 'completed'
+                currentUpload.value.filename = data.filename
             }
 
-            // Remove from active uploads
+            // 从活跃上传中移除
             activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
         })
 
-        // Listen for upload status updates
-        onUploadStatusUpdated(uploadId, (data) => {
-            // Update upload status
+        // 监听上传状态更新
+        onUploadStatusUpdated((data) => {
+            if (data.upload_id !== uploadId) return
+
+            // 更新列表中的上传
             const index = uploads.value.findIndex(u => u.id === uploadId)
             if (index !== -1) {
                 uploads.value[index].status = data.status as FileUpload['status']
             }
 
-            // Update current upload
+            // 更新当前上传
             if (currentUpload.value && currentUpload.value.id === uploadId) {
                 currentUpload.value.status = data.status as FileUpload['status']
             }
 
-            // Update active uploads
+            // 更新活跃上传
             if (data.status === 'paused' || data.status === 'error' || data.status === 'completed') {
                 activeUploads.value = activeUploads.value.filter(id => id !== uploadId)
             } else if (data.status === 'uploading' && !activeUploads.value.includes(uploadId)) {
@@ -331,16 +343,18 @@ export const useUploadStore = defineStore('upload', () => {
         })
     }
 
-    // Reset store
+    // 重置存储
     const reset = () => {
         uploads.value = []
         currentUpload.value = null
+        loading.value = false
+        error.value = ''
         progress.value = null
         activeUploads.value = []
     }
 
     return {
-        // State
+        // 状态
         uploads,
         currentUpload,
         loading,
@@ -348,12 +362,12 @@ export const useUploadStore = defineStore('upload', () => {
         progress,
         activeUploads,
 
-        // Getters
+        // 获取器
         isUploading,
         pendingUploads,
         completedUploads,
 
-        // Actions
+        // 操作
         initUpload,
         uploadChunks,
         getUploadStatus,

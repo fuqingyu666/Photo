@@ -4,13 +4,13 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// All routes require authentication
+// 所有路由都需要认证
 router.use(authenticate as RequestHandler);
 
-// Get shared photos
+// 获取共享照片
 router.get('/', photoController.getSharedPhotos as RequestHandler);
 
-// Share/unshare photos
+// 共享/取消共享照片
 router.post('/:id', photoController.sharePhoto as RequestHandler);
 router.delete('/:id', photoController.unsharePhoto as RequestHandler);
 

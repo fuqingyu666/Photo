@@ -6,7 +6,7 @@ async function createTestUser() {
     try {
         console.log('Creating test user...');
 
-        // Check if test user already exists
+        // 检查测试用户是否已存在
         const [existingUsers] = await pool.execute(
             'SELECT * FROM users WHERE email = ?',
             ['test@example.com']
@@ -17,7 +17,7 @@ async function createTestUser() {
             return;
         }
 
-        // Create a new user
+        // 创建新用户
         const userId = uuidv4();
         const hashedPassword = await bcrypt.hash('password123', 10);
 
@@ -38,7 +38,7 @@ async function createTestUser() {
     }
 }
 
-// Run if this script is executed directly
+// 直接执行此脚本时运行
 if (require.main === module) {
     createTestUser()
         .then(() => {

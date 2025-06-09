@@ -1,3 +1,7 @@
+<!-- 
+  照片上传页面组件
+  实现照片上传功能，包括大文件上传、断点续传、暂停/继续、拖拽上传等特性
+-->
 <template>
   <app-layout>
     <div class="upload-page">
@@ -5,8 +9,10 @@
         <h1>上传照片</h1>
       </div>
       
+      <!-- 上传区域容器 -->
       <div class="upload-container">
         <el-card class="upload-card">
+          <!-- 拖放上传区域，支持文件拖放功能 -->
           <div
             class="upload-area"
             :class="{ 'is-dragging': isDragging }"
@@ -14,10 +20,12 @@
             @dragleave="handleDragLeave"
             @drop="handleFileDrop"
           >
+            <!-- 未选择文件时显示的内容 -->
             <template v-if="!selectedFile">
               <el-icon :size="64" class="upload-icon"><UploadFilled /></el-icon>
               <h3>拖放图片到此处或</h3>
               <el-button type="primary" @click="triggerFileInput">选择图片</el-button>
+              <!-- 隐藏的文件输入框，通过按钮触发 -->
               <input
                 ref="fileInputRef"
                 type="file"
@@ -28,12 +36,15 @@
               <p class="upload-hint">支持JPG、PNG、GIF格式</p>
             </template>
             
+            <!-- 选择文件后显示的内容 -->
             <template v-else>
               <div class="selected-file">
+                <!-- 图片预览区域 -->
                 <div class="preview-container">
                   <img :src="previewUrl" class="preview-image" alt="Preview" />
                 </div>
                 
+                <!-- 文件信息和表单区域 -->
                 <div class="file-info">
                   <div class="file-header">
                     <h3>{{ selectedFile.name }}</h3>
@@ -50,6 +61,7 @@
                   
                   <p>{{ formatFileSize(selectedFile.size) }}</p>
                   
+                  <!-- 照片元数据表单 -->
                   <el-form class="photo-form">
                     <el-form-item label="标题">
                       <el-input v-model="photoForm.title" :disabled="isUploading" />
@@ -64,6 +76,7 @@
                       />
                     </el-form-item>
                     
+                    <!-- 隐私设置开关 -->
                     <el-form-item label="隐私设置">
                       <el-switch
                         v-model="photoForm.isPrivate"
@@ -74,6 +87,7 @@
                       <div class="setting-hint">私密照片仅自己可见，不会显示在共享页面</div>
                     </el-form-item>
                     
+                    <!-- 共享设置开关 -->
                     <el-form-item label="共享设置">
                       <el-switch
                         v-model="photoForm.isShared"
@@ -85,6 +99,7 @@
                     </el-form-item>
                   </el-form>
                   
+                  <!-- 上传进度条区域 -->
                   <div v-if="isUploading" class="upload-progress">
                     <el-progress
                       :percentage="uploadProgress"
@@ -93,6 +108,7 @@
                     <p>{{ uploadStatusText }}</p>
                   </div>
                   
+                  <!-- 上传操作按钮 -->
                   <div class="upload-actions">
                     <el-button
                       type="primary"
@@ -103,6 +119,7 @@
                       {{ uploadButtonText }}
                     </el-button>
                     
+                    <!-- 暂停/继续按钮（断点续传功能的关键UI元素） -->
                     <el-button 
                       v-if="isUploading" 
                       @click="togglePause" 
@@ -135,30 +152,40 @@ import { useAuthStore } from '../store/auth'
 import { usePhotoStore } from '../store/photo'
 import { uploadFile } from '../api/upload'
 
+// 路由和状态管理
 const router = useRouter()
 const authStore = useAuthStore()
 const photoStore = usePhotoStore()
 
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const selectedFile = ref<File | null>(null)
-const previewUrl = ref('')
+// 组件状态定义
+const fileInputRef = ref<HTMLInputElement | null>(null)   // 文件输入框引用
+const selectedFile = ref<File | null>(null)              // 已选文件
+const previewUrl = ref('')                               // 预览图片URL
 const photoForm = ref({
-  title: '',
-  description: '',
-  isPrivate: false,
-  isShared: true
+  title: '',                                            // 照片标题
+  description: '',                                      // 照片描述
+  isPrivate: false,                                     // 是否私密
+  isShared: true                                        // 是否共享
 })
-const uploadStatus = ref('pending') // pending, uploading, paused, complete, error
-const isDragging = ref(false)
-const isUploading = ref(false)
-const isPaused = ref(false)
-const uploadProgress = ref(0)
-const pauseSignal = ref({ paused: false })
+const uploadStatus = ref('pending')                      // 上传状态：pending(等待), uploading(上传中), paused(已暂停), complete(完成), error(错误)
+const isDragging = ref(false)                           // 是否正在拖拽文件
+const isUploading = ref(false)                          // 是否正在上传
+const isPaused = ref(false)                             // 是否已暂停
+const uploadProgress = ref(0)                           // 上传进度百分比
+const pauseSignal = ref({ paused: false })              // 暂停信号，用于传递给上传函数
 
+/**
+ * 计算属性：判断是否可以上传
+ * 需要同时满足：已选择文件且标题不为空
+ */
 const canUpload = computed(() => {
   return selectedFile.value && photoForm.value.title.trim() !== ''
 })
 
+/**
+ * 计算属性：上传状态文本
+ * 根据当前上传状态返回对应的中文提示
+ */
 const uploadStatusText = computed(() => {
   switch(uploadStatus.value) {
     case 'pending': return '准备上传';
@@ -170,6 +197,10 @@ const uploadStatusText = computed(() => {
   }
 })
 
+/**
+ * 计算属性：上传按钮文本
+ * 根据上传状态显示不同的按钮文本
+ */
 const uploadButtonText = computed(() => {
   if (isUploading.value) {
     if (isPaused.value) {
@@ -180,18 +211,28 @@ const uploadButtonText = computed(() => {
   return '开始上传';
 })
 
+/**
+ * 触发隐藏的文件输入框点击事件
+ * 用于通过按钮打开文件选择对话框
+ */
 const triggerFileInput = () => {
   if (fileInputRef.value) {
     fileInputRef.value.click()
   }
 }
 
+/**
+ * 处理文件拖放事件
+ * 当用户拖放文件到上传区域时调用
+ * @param event 拖放事件对象
+ */
 const handleFileDrop = (event: DragEvent) => {
   event.preventDefault()
   isDragging.value = false
 
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
     const file = event.dataTransfer.files[0]
+    // 验证是否为图片文件
     if (file.type.startsWith('image/')) {
       selectFile(file)
     } else {

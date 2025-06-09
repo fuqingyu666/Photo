@@ -37,24 +37,24 @@ export interface ChatMessage {
     created_at?: Date;
 }
 
-// Maximum tokens for context history
+// 上下文历史的最大令牌数
 const MAX_CONTEXT_TOKENS = 2000;
-// Approximate token count per character for English text
+// 英文文本每个字符的大约令牌数
 const TOKENS_PER_CHAR = 0.25;
 
 export class AIModel {
     /**
-     * Analyze photo using DeepSeek API
+     * 使用DeepSeek API分析照片
      */
     static async analyzePhoto(photoId: string, photoUrl: string): Promise<AIAnalysis> {
         try {
-            // Check if analysis already exists
+            // 检查分析是否已存在
             const existingAnalysis = await this.findByPhotoId(photoId);
             if (existingAnalysis) {
                 return existingAnalysis;
             }
 
-            // Call DeepSeek API for image analysis
+            // 调用DeepSeek API进行图像分析
             let analysisData;
 
             if (env.DEEPSEEK_API_KEY) {
@@ -75,15 +75,15 @@ export class AIModel {
                     analysisData = response.data;
                 } catch (error) {
                     console.error('DeepSeek API error:', error);
-                    // Fallback to mock data if API call fails
+                    // 如果API调用失败，回退到模拟数据
                     analysisData = this.mockAnalysisData(photoUrl);
                 }
             } else {
-                // Mock response if API key is not set
+                // 如果未设置API密钥，则使用模拟响应
                 analysisData = this.mockAnalysisData(photoUrl);
             }
 
-            // Save analysis to database
+            // 将分析结果保存到数据库
             const id = uuidv4();
             await pool.execute(
                 'INSERT INTO ai_analysis (id, photo_id, analysis_data) VALUES (?, ?, ?)',
@@ -98,7 +98,7 @@ export class AIModel {
         } catch (error) {
             console.error('Error analyzing photo:', error);
 
-            // Save error analysis
+            // 保存错误分析
             const id = uuidv4();
             const errorData = {
                 error: 'Failed to analyze photo',
@@ -119,7 +119,7 @@ export class AIModel {
     }
 
     /**
-     * Find analysis by photo ID
+     * 通过照片ID查找分析结果
      */
     static async findByPhotoId(photoId: string): Promise<AIAnalysis | null> {
         const [rows] = await pool.execute(
@@ -142,45 +142,45 @@ export class AIModel {
     }
 
     /**
-     * Chat with AI about photos
+     * 与AI聊天讨论照片
      */
     static async chat(userId: string, message: string, context: Array<{ role: string, content: string }> = []): Promise<ChatMessage> {
         try {
-            // Create chat message
+            // 创建聊天消息
             const id = uuidv4();
 
-            // Call DeepSeek API for chat
+            // 调用DeepSeek API进行聊天
             let response: string;
 
             if (env.DEEPSEEK_API_KEY) {
                 try {
-                    // Prepare messages array for DeepSeek API
+                    // 为DeepSeek API准备消息数组
                     const systemMessage = {
                         role: 'system',
                         content: 'You are a helpful assistant specialized in discussing photos and images. Be concise, accurate, and friendly.'
                     };
 
-                    // Validate and filter context
+                    // 验证并过滤上下文
                     const validatedContext = context.filter(msg =>
                         ['system', 'user', 'assistant'].includes(msg.role) &&
                         typeof msg.content === 'string'
                     );
 
-                    // Apply context window management
+                    // 应用上下文窗口管理
                     const trimmedContext = this.trimContextToFit(validatedContext);
 
-                    // Build the messages array for the chat API
+                    // 为聊天API构建消息数组
                     const messages = [
                         systemMessage,
                         ...trimmedContext
                     ];
 
-                    // If context doesn't include the current message, add it
+                    // 如果上下文不包括当前消息，则添加它
                     if (!trimmedContext.some(msg => msg.role === 'user' && msg.content === message)) {
                         messages.push({ role: 'user', content: message });
                     }
 
-                    // Call DeepSeek API
+                    // 调用DeepSeek API
                     const apiResponse = await axios.post(
                         `${env.DEEPSEEK_API_URL}/v1/chat/completions`,
                         {
@@ -195,22 +195,22 @@ export class AIModel {
                                 'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
                                 'Content-Type': 'application/json'
                             },
-                            timeout: 15000 // 15 seconds timeout
+                            timeout: 15000 // 15秒超时
                         }
                     );
 
                     response = apiResponse.data.choices[0].message.content;
                 } catch (error) {
                     console.error('DeepSeek API error:', error);
-                    // Fallback to mock response if API call fails
+                    // 如果API调用失败，回退到模拟响应
                     response = this.mockChatResponse(message);
                 }
             } else {
-                // Mock response if API key is not set
+                // 如果未设置API密钥，则使用模拟响应
                 response = this.mockChatResponse(message);
             }
 
-            // Save message and response to database
+            // 将消息和响应保存到数据库
             await pool.execute(
                 'INSERT INTO ai_chat_messages (id, user_id, message, response) VALUES (?, ?, ?, ?)',
                 [id, userId, message, response]
@@ -225,7 +225,7 @@ export class AIModel {
         } catch (error) {
             console.error('Error chatting with AI:', error);
 
-            // Save error message
+            // 保存错误消息
             const id = uuidv4();
             const errorResponse = 'Sorry, I encountered an error processing your request. Please try again later.';
 
@@ -244,7 +244,7 @@ export class AIModel {
     }
 
     /**
-     * Chat with AI and stream the response
+     * 与AI聊天并流式传输响应
      */
     static async streamChat(userId: string, message: string, context: Array<{ role: string, content: string }> = [], onChunk: (chunk: string) => void): Promise<ChatMessage> {
         try {

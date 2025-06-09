@@ -5,15 +5,15 @@ import { AIAnalysis, ChatMessage } from '../api/ai'
 import { joinAiChatRoom, onAiChatMessage } from '../utils/socket'
 
 export const useAiStore = defineStore('ai', () => {
-    // State
+    // 状态
     const analysis = ref<AIAnalysis | null>(null)
     const chatMessages = ref<ChatMessage[]>([])
     const loading = ref(false)
     const error = ref('')
     const isAnalyzing = ref(false)
 
-    // Actions
-    // Analyze a photo
+    // 操作
+    // 分析照片
     const analyzePhoto = async (photoId: string): Promise<AIAnalysis | null> => {
         loading.value = true
         error.value = ''
@@ -25,7 +25,7 @@ export const useAiStore = defineStore('ai', () => {
             isAnalyzing.value = false
             return result
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to analyze photo'
+            error.value = err.response?.data?.error || '分析照片失败'
             isAnalyzing.value = false
             return null
         } finally {
@@ -33,7 +33,7 @@ export const useAiStore = defineStore('ai', () => {
         }
     }
 
-    // Get photo analysis
+    // 获取照片分析
     const getPhotoAnalysis = async (photoId: string): Promise<AIAnalysis | null> => {
         loading.value = true
         error.value = ''
@@ -43,19 +43,19 @@ export const useAiStore = defineStore('ai', () => {
             analysis.value = result
             return result
         } catch (err: any) {
-            // If analysis not found, it might not have been generated yet
+            // 如果未找到分析，可能是尚未生成
             if (err.response?.status === 404) {
                 return null
             }
 
-            error.value = err.response?.data?.error || 'Failed to get photo analysis'
+            error.value = err.response?.data?.error || '获取照片分析失败'
             return null
         } finally {
             loading.value = false
         }
     }
 
-    // Generate tags for a photo
+    // 为照片生成标签
     const generateTags = async (photoId: string): Promise<string[]> => {
         loading.value = true
         error.value = ''
@@ -64,14 +64,14 @@ export const useAiStore = defineStore('ai', () => {
             const tags = await aiApi.generateTags(photoId)
             return tags
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to generate tags'
+            error.value = err.response?.data?.error || '生成标签失败'
             return []
         } finally {
             loading.value = false
         }
     }
 
-    // Send a message to AI
+    // 向AI发送消息
     const sendMessage = async (message: string): Promise<ChatMessage | null> => {
         loading.value = true
         error.value = ''
@@ -81,14 +81,14 @@ export const useAiStore = defineStore('ai', () => {
             chatMessages.value = [chatMessage, ...chatMessages.value]
             return chatMessage
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to send message'
+            error.value = err.response?.data?.error || '发送消息失败'
             return null
         } finally {
             loading.value = false
         }
     }
 
-    // Get chat history
+    // 获取聊天历史
     const getChatHistory = async (): Promise<ChatMessage[]> => {
         loading.value = true
         error.value = ''
@@ -98,23 +98,23 @@ export const useAiStore = defineStore('ai', () => {
             chatMessages.value = messages
             return messages
         } catch (err: any) {
-            error.value = err.response?.data?.error || 'Failed to get chat history'
+            error.value = err.response?.data?.error || '获取聊天历史失败'
             return []
         } finally {
             loading.value = false
         }
     }
 
-    // Initialize chat with user ID
+    // 初始化用户聊天
     const initChat = (userId: string) => {
         joinAiChatRoom(userId)
         setupChatListeners()
     }
 
-    // Set up chat socket listeners
+    // 设置聊天socket监听器
     const setupChatListeners = () => {
         onAiChatMessage((message) => {
-            // Check if message already exists
+            // 检查消息是否已存在
             const exists = chatMessages.value.some(m => m.id === message.id)
             if (!exists) {
                 chatMessages.value = [message, ...chatMessages.value]
@@ -122,7 +122,7 @@ export const useAiStore = defineStore('ai', () => {
         })
     }
 
-    // Reset store
+    // 重置存储
     const reset = () => {
         analysis.value = null
         chatMessages.value = []
@@ -130,14 +130,14 @@ export const useAiStore = defineStore('ai', () => {
     }
 
     return {
-        // State
+        // 状态
         analysis,
         chatMessages,
         loading,
         error,
         isAnalyzing,
 
-        // Actions
+        // 操作
         analyzePhoto,
         getPhotoAnalysis,
         generateTags,

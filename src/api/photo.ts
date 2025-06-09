@@ -15,7 +15,7 @@ export interface Photo {
     url: string;
     created_at?: string;
     updated_at?: string;
-    username?: string; // For shared photos
+    username?: string; // 用于共享照片
 }
 
 export interface PhotoCreate {
@@ -62,7 +62,7 @@ export interface UserSearchResult {
 }
 
 /**
- * Get user photos with pagination
+ * 获取用户照片（带分页）
  */
 export const getUserPhotos = async (page: number = 1, limit: number = 20): Promise<PhotosResponse> => {
     const response = await api.get<PhotosResponse>(`/photos?page=${page}&limit=${limit}`);
@@ -70,7 +70,7 @@ export const getUserPhotos = async (page: number = 1, limit: number = 20): Promi
 };
 
 /**
- * Get shared photos with pagination
+ * 获取共享照片（带分页）
  */
 export const getSharedPhotos = async (page: number = 1, limit: number = 20): Promise<PhotosResponse> => {
     const response = await api.get<PhotosResponse>(`/photos/shared?page=${page}&limit=${limit}&exclude_private=true`);
@@ -78,7 +78,7 @@ export const getSharedPhotos = async (page: number = 1, limit: number = 20): Pro
 };
 
 /**
- * Get a single photo by ID
+ * 通过ID获取单张照片
  */
 export const getPhotoById = async (id: string): Promise<PhotoResponse> => {
     const response = await api.get<PhotoResponse>(`/photos/${id}`);
@@ -86,7 +86,7 @@ export const getPhotoById = async (id: string): Promise<PhotoResponse> => {
 };
 
 /**
- * Create a new photo
+ * 创建新照片
  */
 export const createPhoto = async (data: PhotoCreate): Promise<Photo> => {
     const response = await api.post<{ photo: Photo }>('/photos', data);
@@ -94,7 +94,7 @@ export const createPhoto = async (data: PhotoCreate): Promise<Photo> => {
 };
 
 /**
- * Update a photo
+ * 更新照片
  */
 export const updatePhoto = async (id: string, data: PhotoUpdate): Promise<Photo> => {
     const response = await api.put<{ photo: Photo }>(`/photos/${id}`, data);
@@ -102,28 +102,28 @@ export const updatePhoto = async (id: string, data: PhotoUpdate): Promise<Photo>
 };
 
 /**
- * Delete a photo
+ * 删除照片
  */
 export const deletePhoto = async (id: string): Promise<void> => {
     await api.delete(`/photos/${id}`);
 };
 
 /**
- * Share a photo with another user
+ * 与其他用户共享照片
  */
 export const sharePhoto = async (id: string, data: ShareData): Promise<void> => {
     await api.post(`/photos/${id}/share`, data);
 };
 
 /**
- * Unshare a photo with another user
+ * 取消与其他用户共享照片
  */
 export const unsharePhoto = async (id: string, data: ShareData): Promise<void> => {
     await api.delete(`/photos/${id}/share`, { data });
 };
 
 /**
- * Get users who have access to a photo
+ * 获取有权访问照片的用户
  */
 export const getPhotoShares = async (id: string): Promise<UserSearchResult[]> => {
     const response = await api.get<{ users: UserSearchResult[] }>(`/photos/${id}/shares`);
@@ -131,7 +131,7 @@ export const getPhotoShares = async (id: string): Promise<UserSearchResult[]> =>
 };
 
 /**
- * Search users for sharing
+ * 搜索用户以进行共享
  */
 export const searchUsers = async (query: string): Promise<UserSearchResult[]> => {
     if (!query || query.length < 2) {
@@ -148,7 +148,7 @@ export const searchUsers = async (query: string): Promise<UserSearchResult[]> =>
 };
 
 /**
- * Update photo settings
+ * 更新照片设置
  */
 export const updatePhotoSettings = async (id: string, settings: {
     is_private?: boolean;

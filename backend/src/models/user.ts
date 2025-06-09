@@ -25,12 +25,12 @@ export interface UserLogin {
 
 export class UserModel {
     /**
-     * Create a new user
+     * 创建新用户
      */
     static async create(userData: UserRegistration): Promise<User> {
         const { username, email, password } = userData;
 
-        // Check if email already exists
+        // 检查邮箱是否已存在
         const [existingUsers] = await pool.execute(
             'SELECT id FROM users WHERE email = ?',
             [email]
@@ -40,20 +40,20 @@ export class UserModel {
             throw new Error('Email already in use');
         }
 
-        // Hash password
+        // 密码加密
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Generate UUID
+        // 生成UUID
         const id = uuidv4();
 
-        // Create user in database
+        // 在数据库中创建用户
         await pool.execute(
             'INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)',
             [id, username, email, hashedPassword]
         );
 
-        // Return user without password
+        // 返回用户信息（不包含密码）
         return {
             id,
             username,
@@ -62,7 +62,7 @@ export class UserModel {
     }
 
     /**
-     * Find user by email
+     * 通过邮箱查找用户
      */
     static async findByEmail(email: string): Promise<User | null> {
         const [rows] = await pool.execute(
@@ -75,7 +75,7 @@ export class UserModel {
     }
 
     /**
-     * Find user by ID
+     * 通过ID查找用户
      */
     static async findById(id: string): Promise<User | null> {
         const [rows] = await pool.execute(
@@ -88,13 +88,13 @@ export class UserModel {
     }
 
     /**
-     * Update user
+     * 更新用户信息
      */
     static async update(id: string, userData: Partial<User>): Promise<User | null> {
-        // Remove sensitive fields
+        // 移除敏感字段
         const { password, ...updateData } = userData;
 
-        // Build update query
+        // 构建更新查询
         const entries = Object.entries(updateData).filter(([_, value]) => value !== undefined);
         if (entries.length === 0) {
             return this.findById(id);
@@ -103,18 +103,18 @@ export class UserModel {
         const fields = entries.map(([key, _]) => `${key} = ?`).join(', ');
         const values = entries.map(([_, value]) => value);
 
-        // Update user
+        // 更新用户
         await pool.execute(
             `UPDATE users SET ${fields} WHERE id = ?`,
             [...values, id]
         );
 
-        // Return updated user
+        // 返回更新后的用户
         return this.findById(id);
     }
 
     /**
-     * Verify user password
+     * 验证用户密码
      */
     static async verifyPassword(user: User, password: string): Promise<boolean> {
         if (!user.password) {
@@ -125,14 +125,14 @@ export class UserModel {
     }
 
     /**
-     * Change user password
+     * 修改用户密码
      */
     static async changePassword(id: string, newPassword: string): Promise<boolean> {
-        // Hash new password
+        // 对新密码进行哈希处理
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
 
-        // Update password
+        // 更新密码
         await pool.execute(
             'UPDATE users SET password = ? WHERE id = ?',
             [hashedPassword, id]

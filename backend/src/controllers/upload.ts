@@ -7,28 +7,28 @@ import { UploadModel } from '../models/upload';
 import { PhotoModel } from '../models/photo';
 import env from '../config/env';
 
-// Configure multer for temporary storage
+// 配置 multer 用于临时存储
 const storage = multer.memoryStorage();
 const upload = multer({
     storage,
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB per chunk
+        fileSize: 10 * 1024 * 1024 // 每个分块10MB
     }
 });
 
-// Export multer middleware for route usage
+// 导出 multer 中间件供路由使用
 export const uploadMiddleware = upload.single('chunk');
 
-// Store socket.io instance
+// 存储 socket.io 实例
 let io: SocketServer;
 
-// Set socket.io instance
+// 设置 socket.io 实例
 export const setSocketIO = (socketIO: SocketServer) => {
     io = socketIO;
 };
 
 /**
- * Initialize a new upload
+ * 初始化新上传
  */
 export const initUpload = async (req: Request, res: Response) => {
     try {
@@ -102,34 +102,34 @@ export const initUpload = async (req: Request, res: Response) => {
 };
 
 /**
- * Upload a chunk
+ * 上传分块
  */
 export const uploadChunk = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ error: 'Not authenticated' });
+            return res.status(401).json({ error: '未认证' });
         }
 
         if (!req.file) {
-            return res.status(400).json({ error: 'No chunk file provided' });
+            return res.status(400).json({ error: '没有提供分块文件' });
         }
 
         // 从URL参数或请求体获取upload_id
         const upload_id = req.params.id || req.body.upload_id;
         const { chunk_index, chunk_hash } = req.body;
 
-        // Validate required fields
+        // 验证必填字段
         if (!upload_id || chunk_index === undefined || !chunk_hash) {
-            return res.status(400).json({ error: 'Missing required fields' });
+            return res.status(400).json({ error: '缺少必填字段' });
         }
 
-        // Check if user owns this upload
+        // 检查用户是否拥有此上传
         const isOwner = await UploadModel.isOwner(upload_id, req.user.id);
         if (!isOwner) {
-            return res.status(403).json({ error: 'You do not have permission to access this upload' });
+            return res.status(403).json({ error: '你没有权限访问此上传' });
         }
 
-        // Upload chunk
+        // 上传分块
         const chunk = await UploadModel.uploadChunk(
             upload_id,
             parseInt(chunk_index),
@@ -137,10 +137,10 @@ export const uploadChunk = async (req: Request, res: Response) => {
             req.file.buffer
         );
 
-        // Get upload progress
+        // 获取上传进度
         const progress = await UploadModel.getProgress(upload_id);
 
-        // Emit upload progress event via socket.io
+        // 通过 socket.io 发送上传进度事件
         if (io) {
             io.to(`upload-${upload_id}`).emit('upload-progress', {
                 upload_id,
@@ -153,40 +153,40 @@ export const uploadChunk = async (req: Request, res: Response) => {
             progress
         });
     } catch (error) {
-        console.error('Error uploading chunk:', error);
-        res.status(500).json({ error: 'Failed to upload chunk' });
+        console.error('上传分块失败:', error);
+        res.status(500).json({ error: '上传分块失败' });
     }
 };
 
 /**
- * Complete upload and merge chunks
+ * 完成上传并合并分块
  */
 export const completeUpload = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ error: 'Not authenticated' });
+            return res.status(401).json({ error: '未认证' });
         }
 
         const { upload_id } = req.body;
 
-        // Validate required fields
+        // 验证必填字段
         if (!upload_id) {
-            return res.status(400).json({ error: 'Upload ID is required' });
+            return res.status(400).json({ error: '上传ID是必需的' });
         }
 
-        // Check if user owns this upload
+        // 检查用户是否拥有此上传
         const isOwner = await UploadModel.isOwner(upload_id, req.user.id);
         if (!isOwner) {
-            return res.status(403).json({ error: 'You do not have permission to access this upload' });
+            return res.status(403).json({ error: '你没有权限访问此上传' });
         }
 
-        // Merge chunks
+        // 合并分块
         const filename = await UploadModel.mergeChunks(upload_id);
 
-        // Get upload record
+        // 获取上传记录
         const upload = await UploadModel.findById(upload_id);
 
-        // Emit upload completed event via socket.io
+        // 通过 socket.io 发送上传完成事件
         if (io) {
             io.to(`upload-${upload_id}`).emit('upload-completed', {
                 upload_id,
@@ -195,41 +195,41 @@ export const completeUpload = async (req: Request, res: Response) => {
         }
 
         res.json({
-            message: 'Upload completed successfully',
+            message: '上传成功完成',
             upload,
             filename,
             url: `${req.protocol}://${req.get('host')}/uploads/${filename}`
         });
     } catch (error) {
-        console.error('Error completing upload:', error);
-        res.status(500).json({ error: 'Failed to complete upload' });
+        console.error('完成上传失败:', error);
+        res.status(500).json({ error: '完成上传失败' });
     }
 };
 
 /**
- * Get upload status
+ * 获取上传状态
  */
 export const getUploadStatus = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ error: 'Not authenticated' });
+            return res.status(401).json({ error: '未认证' });
         }
 
         const uploadId = req.params.id;
 
-        // Check if user owns this upload
+        // 检查用户是否拥有此上传
         const isOwner = await UploadModel.isOwner(uploadId, req.user.id);
         if (!isOwner) {
-            return res.status(403).json({ error: 'You do not have permission to access this upload' });
+            return res.status(403).json({ error: '你没有权限访问此上传' });
         }
 
-        // Get upload record
+        // 获取上传记录
         const upload = await UploadModel.findById(uploadId);
         if (!upload) {
-            return res.status(404).json({ error: 'Upload not found' });
+            return res.status(404).json({ error: '上传未找到' });
         }
 
-        // Get progress
+        // 获取进度
         const progress = await UploadModel.getProgress(uploadId);
 
         res.json({
@@ -237,18 +237,18 @@ export const getUploadStatus = async (req: Request, res: Response) => {
             progress
         });
     } catch (error) {
-        console.error('Error getting upload status:', error);
-        res.status(500).json({ error: 'Failed to get upload status' });
+        console.error('获取上传状态失败:', error);
+        res.status(500).json({ error: '获取上传状态失败' });
     }
 };
 
 /**
- * Update upload status (pause/resume)
+ * 更新上传状态（暂停/恢复）
  */
 export const updateUploadStatus = async (req: Request, res: Response) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ error: 'Not authenticated' });
+            return res.status(401).json({ error: '未认证' });
         }
 
         const uploadId = req.params.id;

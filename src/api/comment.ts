@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/auth';
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-// Create Axios instance
+// 创建 Axios 实例
 const api = axios.create({
     baseURL,
     headers: {
@@ -11,7 +11,7 @@ const api = axios.create({
     }
 });
 
-// Add auth token to requests
+// 向请求添加认证令牌
 api.interceptors.request.use(
     (config) => {
         const auth = useAuthStore();
@@ -35,7 +35,7 @@ export interface Comment {
 }
 
 /**
- * Get comments for a photo
+ * 获取照片的评论
  */
 export const getPhotoComments = async (photoId: string): Promise<Comment[]> => {
     try {
@@ -48,7 +48,7 @@ export const getPhotoComments = async (photoId: string): Promise<Comment[]> => {
 };
 
 /**
- * Create a new comment
+ * 创建新评论
  */
 export const createComment = async (photoId: string, content: string): Promise<Comment | null> => {
     try {
@@ -61,7 +61,7 @@ export const createComment = async (photoId: string, content: string): Promise<C
 };
 
 /**
- * Delete a comment
+ * 删除评论
  */
 export const deleteComment = async (photoId: string, commentId: string): Promise<boolean> => {
     try {

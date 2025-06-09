@@ -4,27 +4,39 @@ import axios from 'axios'
 import { useAuthStore } from './auth'
 import { v4 as uuidv4 } from 'uuid'
 
+/**
+ * 聊天消息接口
+ * 定义AI对话中的消息结构
+ */
 export interface ChatMessage {
-    id: string
-    role: 'user' | 'assistant' | 'system'
-    content: string
-    timestamp: Date
+    id: string               // 消息唯一ID
+    role: 'user' | 'assistant' | 'system' // 消息角色：用户、AI助手或系统
+    content: string          // 消息内容
+    timestamp: Date          // 消息时间戳
 }
 
+/**
+ * 流式传输选项接口
+ * 用于处理AI响应的流式传输
+ */
 export interface StreamOptions {
-    onStream?: (chunk: string) => void
-    signal?: AbortSignal
+    onStream?: (chunk: string) => void  // 处理流式数据块的回调函数
+    signal?: AbortSignal                // 用于取消请求的信号
 }
 
+/**
+ * AI聊天状态管理
+ * 处理与AI对话的全部逻辑，包括消息存储、发送和接收
+ */
 export const useAiChatStore = defineStore('ai-chat', () => {
-    // State
-    const messages = ref<ChatMessage[]>([])
-    const isLoading = ref(false)
-    const error = ref('')
-    const currentStreamingMessage = ref<ChatMessage | null>(null)
-    const authStore = useAuthStore()
+    // 状态定义
+    const messages = ref<ChatMessage[]>([])       // 所有对话消息
+    const isLoading = ref(false)                  // 加载状态
+    const error = ref('')                         // 错误信息
+    const currentStreamingMessage = ref<ChatMessage | null>(null) // 当前正在流式传输的消息
+    const authStore = useAuthStore()              // 认证状态
 
-    // Getters
+    // 计算属性
     const lastMessage = computed(() => {
         if (messages.value.length === 0) {
             return null
@@ -33,10 +45,15 @@ export const useAiChatStore = defineStore('ai-chat', () => {
     })
 
     // 历史消息限制
-    const MAX_DISPLAY_MESSAGES = 50
-    const MAX_CONTEXT_MESSAGES = 10
+    const MAX_DISPLAY_MESSAGES = 50               // 最大显示消息数
+    const MAX_CONTEXT_MESSAGES = 10               // 发送给API的上下文消息数
 
-    // 调用DeepSeek API（非流式）
+    /**
+     * 调用DeepSeek AI API（非流式）
+     * 发送用户消息到AI并获取完整回复
+     * @param content 用户消息内容
+     * @returns AI回复内容
+     */
     const callDeepSeekAPI = async (content: string): Promise<string> => {
         try {
             // 获取最近的上下文消息
@@ -51,15 +68,15 @@ export const useAiChatStore = defineStore('ai-chat', () => {
             const apiKey = 'sk-yxxplzgtjouqhvdtikrmmrzepaigzarzfjrtrmolbxbamjyj'; // SiliconFlow API 密钥
 
             const requestBody = {
-                model: "Qwen/QwQ-32B",
+                model: "Qwen/QwQ-32B",           // 使用通义千问模型
                 messages: [
                     ...contextMessages,
                     { role: 'user', content: content }
                 ],
-                stream: false,
-                max_tokens: 512,
-                temperature: 0.7,
-                top_p: 0.7
+                stream: false,                    // 非流式传输
+                max_tokens: 512,                  // 最大生成令牌数
+                temperature: 0.7,                 // 温度参数，控制输出随机性
+                top_p: 0.7                        // 核采样参数
             };
 
             console.log('发送请求:', JSON.stringify(requestBody, null, 2));
@@ -95,7 +112,12 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         }
     };
 
-    // 模拟AI响应函数 (用于API未配置或调用失败时)
+    /**
+     * 模拟AI响应函数
+     * 在API未配置或调用失败时提供模拟回复
+     * @param content 用户消息内容
+     * @returns 模拟的AI回复
+     */
     const mockAiResponse = async (content: string): Promise<string> => {
         // 模拟API延迟
         await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000))
@@ -125,7 +147,10 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         return responses[Math.floor(Math.random() * responses.length)]
     }
 
-    // 持久化对话历史
+    /**
+     * 持久化对话历史
+     * 将对话保存到本地存储，确保页面刷新后对话不丢失
+     */
     const saveMessagesToStorage = () => {
         try {
             const messagesToSave = messages.value.map(msg => ({
@@ -134,11 +159,14 @@ export const useAiChatStore = defineStore('ai-chat', () => {
             }));
             localStorage.setItem('ai_chat_history', JSON.stringify(messagesToSave));
         } catch (err) {
-            console.error('Failed to save chat history:', err);
+            console.error('保存聊天历史失败:', err);
         }
     };
 
-    // 从存储加载对话历史
+    /**
+     * 从存储加载对话历史
+     * 页面加载时恢复之前的对话
+     */
     const loadMessagesFromStorage = () => {
         try {
             const savedMessages = localStorage.getItem('ai_chat_history');
@@ -152,12 +180,17 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                 initializeChat();
             }
         } catch (err) {
-            console.error('Failed to load chat history:', err);
+            console.error('加载聊天历史失败:', err);
             initializeChat();
         }
     };
 
-    // Add a user message
+    /**
+     * 添加用户消息
+     * 将用户输入的消息添加到对话历史
+     * @param content 用户消息内容
+     * @returns 创建的消息对象
+     */
     const addUserMessage = async (content: string): Promise<ChatMessage> => {
         const message: ChatMessage = {
             id: uuidv4(),
@@ -176,7 +209,12 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         return message
     }
 
-    // Add an AI message
+    /**
+     * 添加AI消息
+     * 将AI的回复添加到对话历史
+     * @param content AI消息内容
+     * @returns 创建的消息对象
+     */
     const addAIMessage = async (content: string): Promise<ChatMessage> => {
         const message: ChatMessage = {
             id: uuidv4(),
@@ -189,7 +227,12 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         return message
     }
 
-    // Add a system message
+    /**
+     * 添加系统消息
+     * 添加系统通知或提示到对话历史
+     * @param content 系统消息内容
+     * @returns 创建的消息对象
+     */
     const addSystemMessage = async (content: string): Promise<ChatMessage> => {
         const message: ChatMessage = {
             id: uuidv4(),
@@ -202,7 +245,11 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         return message
     }
 
-    // Update current streaming message
+    /**
+     * 更新正在流式传输的消息
+     * 在收到流式数据块时追加到当前消息
+     * @param chunk 收到的数据块
+     */
     const updateStreamingMessage = (chunk: string): void => {
         if (currentStreamingMessage.value) {
             currentStreamingMessage.value.content += chunk
@@ -210,13 +257,19 @@ export const useAiChatStore = defineStore('ai-chat', () => {
         }
     }
 
-    // Send a message and get AI response
+    /**
+     * 发送消息并获取AI回复
+     * 处理用户消息发送和AI响应接收的完整流程
+     * @param content 用户消息内容
+     * @param options 流式传输选项
+     * @returns 创建的AI回复消息或null
+     */
     const sendMessage = async (content: string, options?: StreamOptions): Promise<ChatMessage | null> => {
         error.value = ''
         isLoading.value = true
 
         try {
-            // Prepare context for API
+            // 准备发送给API的上下文
             const context = messages.value
                 .slice(-MAX_CONTEXT_MESSAGES)
                 .map(msg => ({
@@ -224,9 +277,9 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                     content: msg.content
                 }));
 
-            // Check if we want to use streaming
+            // 检查是否使用流式传输
             if (options?.onStream) {
-                // Create a placeholder message for streaming
+                // 创建流式传输的占位消息
                 currentStreamingMessage.value = {
                     id: uuidv4(),
                     role: 'assistant',
@@ -235,21 +288,21 @@ export const useAiChatStore = defineStore('ai-chat', () => {
                 }
                 messages.value.push(currentStreamingMessage.value)
 
-                // Create and process stream
+                // 创建并处理流式传输
                 try {
                     // 使用SiliconFlow API的流式接口
                     const apiKey = 'sk-yxxplzgtjouqhvdtikrmmrzepaigzarzfjrtrmolbxbamjyj';
 
                     const requestBody = {
-                        model: "Qwen/QwQ-32B",
+                        model: "Qwen/QwQ-32B", // 使用通义千问模型
                         messages: [
                             ...context,
                             { role: 'user', content }
                         ],
-                        stream: true,
-                        max_tokens: 512,
-                        temperature: 0.7,
-                        top_p: 0.7
+                        stream: true,           // 启用流式传输
+                        max_tokens: 512,        // 最大生成令牌数
+                        temperature: 0.7,        // 温度参数，控制输出随机性
+                        top_p: 0.7               // 核采样参数
                     };
 
                     console.log('发送流式请求:', JSON.stringify(requestBody, null, 2));

@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-// App component setup
+// App 组件设置
 </script>
 
 <style lang="scss">
@@ -18,7 +18,7 @@
   height: 100vh;
 }
 
-// Transition animations
+// 过渡动画
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;

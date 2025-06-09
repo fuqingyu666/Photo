@@ -12,7 +12,7 @@ export interface Comment {
 
 export class CommentModel {
     /**
-     * Create a new comment
+     * 创建新评论
      */
     static async create(comment: Omit<Comment, 'id' | 'created_at'>): Promise<Comment> {
         const id = uuidv4();
@@ -28,7 +28,7 @@ export class CommentModel {
     }
 
     /**
-     * Find comment by ID
+     * 通过ID查找评论
      */
     static async findById(id: string): Promise<Comment | null> {
         const [rows] = await pool.execute(
@@ -44,12 +44,12 @@ export class CommentModel {
     }
 
     /**
-     * Get comments for a photo
+     * 获取照片的所有评论
      */
     static async getByPhotoId(photoId: string, limit: number = 100): Promise<Comment[]> {
         // 确保limit是一个安全的数字
         const safeLimit = Math.min(Math.max(1, parseInt(String(limit)) || 100), 500);
-        
+
         const [rows] = await pool.execute(
             `SELECT c.*, u.username
              FROM comments c
@@ -59,12 +59,12 @@ export class CommentModel {
              LIMIT ${safeLimit}`,
             [photoId]
         );
-        
+
         return rows as Comment[];
     }
 
     /**
-     * Delete a comment
+     * 删除评论
      */
     static async delete(id: string): Promise<boolean> {
         const [result] = await pool.execute(

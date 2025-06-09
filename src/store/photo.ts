@@ -29,7 +29,7 @@ export interface Photo {
     isFavorite?: boolean
 }
 
-// Generate mock data
+// 生成模拟数据
 const generateMockPhotos = (): Photo[] => {
     const mockUsers = [
         { id: '1', username: 'alice', avatar: 'https://randomuser.me/api/portraits/women/1.jpg' },
@@ -89,9 +89,9 @@ const generateMockPhotos = (): Photo[] => {
     return photos
 }
 
-// Photo Store
+// 照片存储
 export const usePhotoStore = defineStore('photo', () => {
-    // State
+    // 状态
     const photos = ref<Photo[]>([])
     const userPhotos = ref<Photo[]>([])
     const sharedPhotos = ref<Photo[]>([])
@@ -112,7 +112,7 @@ export const usePhotoStore = defineStore('photo', () => {
     })
     const favoritePhotos = ref<string[]>([])
 
-    // Load favorites from localStorage on init
+    // 初始化时从localStorage加载收藏
     const initFavorites = () => {
         const savedFavorites = localStorage.getItem('favoritePhotos')
         if (savedFavorites) {
@@ -120,10 +120,10 @@ export const usePhotoStore = defineStore('photo', () => {
         }
     }
 
-    // Initialize favorites
+    // 初始化收藏
     initFavorites()
 
-    // Getters
+    // 获取器
     const hasMorePhotos = computed(() => {
         return pagination.value.page < pagination.value.pages
     })

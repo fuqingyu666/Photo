@@ -39,18 +39,18 @@ export interface UploadInit {
 
 export class UploadModel {
     /**
-     * Initialize a new file upload
+     * 初始化新文件上传
      */
     static async initUpload(uploadData: UploadInit): Promise<FileUpload> {
         const { user_id, original_filename, file_size, file_type, file_hash, chunks_total } = uploadData;
 
-        // Check if upload with same hash already exists for this user
+        // 检查该用户是否已存在相同哈希值的上传
         const [existingUploads] = await pool.execute(
             'SELECT id, status FROM file_uploads WHERE user_id = ? AND file_hash = ?',
             [user_id, file_hash]
         );
 
-        // If upload exists and is not completed, return it
+        // 如果上传已存在且未完成，则返回它
         if ((existingUploads as any[]).length > 0) {
             const existingUpload = (existingUploads as any[])[0];
             if (existingUpload.status !== 'completed') {
@@ -58,11 +58,11 @@ export class UploadModel {
             }
         }
 
-        // Generate unique filename
+        // 生成唯一文件名
         const fileExt = path.extname(original_filename);
         const filename = `${file_hash}-${Date.now()}${fileExt}`;
 
-        // Create upload record
+        // 创建上传记录
         const id = uuidv4();
         await pool.execute(
             `INSERT INTO file_uploads (
@@ -75,7 +75,7 @@ export class UploadModel {
             ]
         );
 
-        // Create upload directory if it doesn't exist
+        // 如果上传目录不存在，则创建
         const uploadDir = path.join(env.UPLOAD_DIR, 'chunks', id);
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
@@ -96,7 +96,7 @@ export class UploadModel {
     }
 
     /**
-     * Upload a chunk
+     * 上传分块
      */
     static async uploadChunk(
         uploadId: string,
@@ -104,20 +104,20 @@ export class UploadModel {
         chunkHash: string,
         chunkBuffer: Buffer
     ): Promise<FileChunk> {
-        // Get upload record
+        // 获取上传记录
         const upload = await this.findById(uploadId);
         if (!upload) {
             throw new Error('Upload not found');
         }
 
-        // Check if chunk already exists
+        // 检查分块是否已存在
         const [existingChunks] = await pool.execute(
             'SELECT id FROM file_chunks WHERE upload_id = ? AND chunk_index = ?',
             [uploadId, chunkIndex]
         );
 
         if ((existingChunks as any[]).length > 0) {
-            // Chunk already exists, return it
+            // 分块已存在，返回它
             return {
                 id: (existingChunks as any[])[0].id,
                 upload_id: uploadId,
@@ -127,7 +127,7 @@ export class UploadModel {
             };
         }
 
-        // Save chunk to disk
+        // 将分块保存到磁盘
         const chunkDir = path.join(env.UPLOAD_DIR, 'chunks', uploadId);
         if (!fs.existsSync(chunkDir)) {
             fs.mkdirSync(chunkDir, { recursive: true });
@@ -136,20 +136,20 @@ export class UploadModel {
         const chunkPath = path.join(chunkDir, `${chunkIndex}`);
         fs.writeFileSync(chunkPath, chunkBuffer);
 
-        // Create chunk record
+        // 创建分块记录
         const chunkId = uuidv4();
         await pool.execute(
             'INSERT INTO file_chunks (id, upload_id, chunk_index, chunk_hash, chunk_size) VALUES (?, ?, ?, ?, ?)',
             [chunkId, uploadId, chunkIndex, chunkHash, chunkBuffer.length]
         );
 
-        // Update upload status
+        // 更新上传状态
         await pool.execute(
             'UPDATE file_uploads SET chunks_uploaded = chunks_uploaded + 1, status = ? WHERE id = ?',
             ['uploading', uploadId]
         );
 
-        // Check if all chunks are uploaded
+        // 检查是否所有分块都已上传
         const [result] = await pool.execute(
             'SELECT chunks_uploaded, chunks_total FROM file_uploads WHERE id = ?',
             [uploadId]
@@ -157,7 +157,7 @@ export class UploadModel {
 
         const uploadRecord = (result as any[])[0];
         if (uploadRecord.chunks_uploaded === uploadRecord.chunks_total) {
-            // All chunks uploaded, update status
+            // 所有分块已上传，更新状态
             await pool.execute(
                 'UPDATE file_uploads SET status = ? WHERE id = ?',
                 ['completed', uploadId]
@@ -174,10 +174,10 @@ export class UploadModel {
     }
 
     /**
-     * Merge chunks into final file
+     * 合并分块为最终文件
      */
     static async mergeChunks(uploadId: string): Promise<string> {
-        // Get upload record
+        // 获取上传记录
         const upload = await this.findById(uploadId);
         if (!upload) {
             throw new Error('Upload not found');
@@ -187,7 +187,7 @@ export class UploadModel {
             throw new Error('Upload not completed');
         }
 
-        // Get all chunks
+        // 获取所有分块
         const [chunks] = await pool.execute(
             'SELECT chunk_index FROM file_chunks WHERE upload_id = ? ORDER BY chunk_index ASC',
             [uploadId]
@@ -197,11 +197,11 @@ export class UploadModel {
             throw new Error('Not all chunks are uploaded');
         }
 
-        // Create final file
+        // 创建最终文件
         const finalFilePath = path.join(env.UPLOAD_DIR, upload.filename);
         const writeStream = fs.createWriteStream(finalFilePath);
 
-        // Merge chunks
+        // 合并分块
         for (let i = 0; i < upload.chunks_total; i++) {
             const chunkPath = path.join(env.UPLOAD_DIR, 'chunks', uploadId, `${i}`);
             const chunkBuffer = fs.readFileSync(chunkPath);
@@ -210,14 +210,14 @@ export class UploadModel {
 
         writeStream.end();
 
-        // Wait for file to be written
+        // 等待文件写入完成
         await new Promise<void>((resolve) => {
             writeStream.on('finish', () => {
                 resolve();
             });
         });
 
-        // Clean up chunks
+        // 清理分块
         const chunkDir = path.join(env.UPLOAD_DIR, 'chunks', uploadId);
         fs.rmSync(chunkDir, { recursive: true, force: true });
 
@@ -225,7 +225,7 @@ export class UploadModel {
     }
 
     /**
-     * Find upload by ID
+     * 通过ID查找上传
      */
     static async findById(id: string): Promise<FileUpload | null> {
         const [rows] = await pool.execute(
@@ -238,7 +238,7 @@ export class UploadModel {
     }
 
     /**
-     * Find uploads by user ID
+     * 通过用户ID查找上传
      */
     static async findByUserId(userId: string): Promise<FileUpload[]> {
         const [rows] = await pool.execute(

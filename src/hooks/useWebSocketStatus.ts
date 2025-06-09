@@ -2,27 +2,27 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { onConnectionChange } from '../utils/websocket'
 
 /**
- * Hook to monitor WebSocket connection status
+ * 用于监控WebSocket连接状态的Hook
  */
 export function useWebSocketStatus() {
     const isConnected = ref(false)
 
-    // Connection status listener
+    // 连接状态监听器
     const connectionListener = (connected: boolean) => {
         isConnected.value = connected
     }
 
-    // Set up listener when component mounts
+    // 组件挂载时设置监听器
     onMounted(() => {
         onConnectionChange(connectionListener)
     })
 
-    // Clean up listener when component unmounts
+    // 组件卸载时清理监听器
     onUnmounted(() => {
-        // The WebSocket service doesn't currently have a removeConnectionListener method,
-        // but we're adding this for future-proofing
+        // WebSocket服务目前没有removeConnectionListener方法，
+        // 但我们添加这段代码是为了未来的扩展性
         if (typeof onConnectionChange === 'function') {
-            // In a real implementation, we would call something like:
+            // 在实际实现中，我们会调用类似这样的方法：
             // removeConnectionListener(connectionListener)
         }
     })

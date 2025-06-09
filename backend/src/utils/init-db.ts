@@ -3,13 +3,13 @@ import path from 'path';
 import mysql from 'mysql2/promise';
 
 /**
- * Initialize the database with schema
+ * 使用数据库模式初始化数据库
  */
 async function initializeDatabase() {
     try {
         console.log('Initializing database...');
 
-        // Create connection with database name
+        // 创建带有数据库名称的连接
         const connection = await mysql.createConnection({
             host: 'localhost',
             user: 'root',
@@ -20,18 +20,18 @@ async function initializeDatabase() {
 
         console.log('Connection established to photo database');
 
-        // Read schema SQL file
+        // 读取模式 SQL 文件
         const schemaPath = path.join(__dirname, '../config/schema.sql');
         const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
-        // Split SQL statements by semicolon
+        // 按分号拆分 SQL 语句
         const statements = schemaSql
             .split(';')
             .filter(statement => statement.trim().length > 0);
 
         console.log(`Found ${statements.length} SQL statements to execute`);
 
-        // Execute each statement
+        // 执行每条语句
         for (const statement of statements) {
             try {
                 await connection.query(statement);
@@ -42,7 +42,7 @@ async function initializeDatabase() {
             }
         }
 
-        // Verify tables were created
+        // 验证表是否已创建
         const [rows] = await connection.query('SHOW TABLES');
         console.log('Tables in photo database:', rows);
 
@@ -56,7 +56,7 @@ async function initializeDatabase() {
     }
 }
 
-// Run if this script is executed directly
+// 如果此脚本直接执行则运行
 if (require.main === module) {
     initializeDatabase()
         .then(success => {

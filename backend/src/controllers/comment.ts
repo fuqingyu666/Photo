@@ -2,16 +2,16 @@ import { Request, Response } from 'express';
 import { Server as SocketServer } from 'socket.io';
 import { CommentModel } from '../models/comment';
 
-// Store socket.io instance
+// 存储 socket.io 实例
 let io: SocketServer;
 
-// Set socket.io instance
+// 设置 socket.io 实例
 export const setSocketIO = (socketIO: SocketServer) => {
     io = socketIO;
 };
 
 /**
- * Get comments for a photo
+ * 获取照片的评论
  */
 export const getComments = async (req: Request, res: Response) => {
     try {
@@ -37,7 +37,7 @@ export const getComments = async (req: Request, res: Response) => {
 };
 
 /**
- * Create a new comment
+ * 创建新评论
  */
 export const createComment = async (req: Request, res: Response) => {
     try {
@@ -78,7 +78,7 @@ export const createComment = async (req: Request, res: Response) => {
 };
 
 /**
- * Delete a comment
+ * 删除评论
  */
 export const deleteComment = async (req: Request, res: Response) => {
     try {

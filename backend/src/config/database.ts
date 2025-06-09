@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import env from './env';
 
-// Create a connection pool
+// 创建连接池
 const pool = mysql.createPool({
     host: 'localhost',
     user: 'root',
