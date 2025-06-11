@@ -17,12 +17,12 @@ export default {
     DB_PORT: parseInt(process.env.DB_PORT || '3306', 10),
 
     // JWT配置
-    JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key',
+    JWT_SECRET: process.env.JWT_SECRET || 'your-secret-key', 
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1d',
 
     // 文件上传配置
     UPLOAD_DIR: process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads'),
-    CHUNK_SIZE: parseInt(process.env.CHUNK_SIZE || '2097152', 10), // 2MB大小（字节）
+    CHUNK_SIZE: parseInt(process.env.CHUNK_SIZE || '2097152', 10), // 2MB大小
 
     // CORS配置
     CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3001',
