@@ -14,3 +14,5 @@ router.put('/profile', authenticate as RequestHandler, authController.updateProf
 router.post('/change-password', authenticate as RequestHandler, authController.changePassword as RequestHandler);
 
 export default router; 
+
+

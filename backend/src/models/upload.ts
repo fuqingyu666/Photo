@@ -37,6 +37,7 @@ export interface UploadInit {
     chunks_total: number;
 }
 
+
 export class UploadModel {
     /**
      * 初始化新文件上传

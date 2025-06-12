@@ -1,6 +1,6 @@
-import express, { RequestHandler } from 'express';
+import express, { RequestHandler } from 'express';     //ai主要是在前端实现的，后端ai部分的代码没有用
 import * as aiController from '../controllers/ai';
-import { authenticate } from '../middleware/auth';
+import { authenticate } from '../middleware/auth'; 
 
 const router = express.Router();
 
@@ -17,3 +17,11 @@ router.post('/chat', aiController.chat as RequestHandler);
 router.get('/chat/history', aiController.getChatHistory as RequestHandler);
 
 export default router; 
+
+
+
+
+
+
+
+
